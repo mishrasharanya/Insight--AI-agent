@@ -1,0 +1,7 @@
+I noticed that warm introductions usually lead to better responses than cold job applications.
+
+When I apply directly through company portals, I rarely hear back.
+
+I feel more confident after building AI and data projects that I can explain clearly.
+
+ForeQuest helped me understand forecasting, volatility modeling, Streamlit deployment and LLM explanation layers.
