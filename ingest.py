@@ -2,6 +2,7 @@
 
 import os
 import hashlib
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -12,6 +13,7 @@ from sentence_transformers import SentenceTransformer
 CHROMA_PATH = "chroma_db"
 COLLECTION_NAME = "personal_memory"
 DATA_FOLDER = "data"
+MAX_CHUNK_CHARS = 800  # rough cap so no single chunk is huge
 
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
@@ -55,28 +57,88 @@ def load_document(file_path):
     return None
 
 
-def chunk_text(text):
+def split_long_paragraph(paragraph, max_chars):
+    """Break an oversized paragraph into smaller pieces on sentence boundaries."""
+    sentences = paragraph.replace("\n", " ").split(". ")
+    pieces = []
+    current = ""
+
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+
+        candidate = (current + ". " + sentence).strip() if current else sentence
+
+        if len(candidate) > max_chars and current:
+            pieces.append(current.strip())
+            current = sentence
+        else:
+            current = candidate
+
+    if current:
+        pieces.append(current.strip())
+
+    return pieces
+
+
+def chunk_text(text, max_chars=MAX_CHUNK_CHARS):
     paragraphs = text.split("\n\n")
     chunks = []
 
     for paragraph in paragraphs:
         clean_paragraph = paragraph.strip()
 
-        if clean_paragraph:
+        if not clean_paragraph:
+            continue
+
+        if len(clean_paragraph) <= max_chars:
             chunks.append(clean_paragraph)
+        else:
+            chunks.extend(split_long_paragraph(clean_paragraph, max_chars))
 
     return chunks
+
+
+def get_file_dates(file_path):
+    """Returns (date_modified, date_ingested) as ISO strings."""
+    modified_timestamp = os.path.getmtime(file_path)
+    date_modified = datetime.fromtimestamp(modified_timestamp).isoformat()
+    date_ingested = datetime.now().isoformat()
+
+    return date_modified, date_ingested
+
+
+def cleanup_deleted_files(collection, current_files):
+    """Remove chunks for any source file no longer present in the data folder."""
+    all_records = collection.get(include=["metadatas"])
+
+    if not all_records["metadatas"]:
+        return
+
+    known_sources = set()
+    for metadata in all_records["metadatas"]:
+        known_sources.add(metadata["source"])
+
+    for source in known_sources:
+        if source not in current_files:
+            collection.delete(where={"source": source})
+            print(f"Removed chunks for deleted file: {source}")
 
 
 def main():
     client = chromadb.PersistentClient(path=CHROMA_PATH)
     collection = client.get_or_create_collection(name=COLLECTION_NAME)
 
+    current_files = []
+
     for filename in os.listdir(DATA_FOLDER):
         file_path = os.path.join(DATA_FOLDER, filename)
 
         if not os.path.isfile(file_path):
             continue
+
+        current_files.append(file_path)
 
         text = load_document(file_path)
 
@@ -98,6 +160,7 @@ def main():
             print(f"Updated file detected. Re-indexing: {filename}")
 
         chunks = chunk_text(text)
+        date_modified, date_ingested = get_file_dates(file_path)
 
         for i, chunk in enumerate(chunks):
             chunk_id = f"{file_path}_chunk_{i}"
@@ -112,11 +175,15 @@ def main():
                     "filename": filename,
                     "chunk_index": i,
                     "file_hash": file_hash,
-                    "file_type": Path(file_path).suffix.lower()
+                    "file_type": Path(file_path).suffix.lower(),
+                    "date_modified": date_modified,
+                    "date_ingested": date_ingested
                 }]
             )
 
         print(f"Stored {len(chunks)} chunks from {filename}")
+
+    cleanup_deleted_files(collection, current_files)
 
     print("Ingestion complete.")
 

@@ -2,7 +2,7 @@
 
 import chromadb
 from sentence_transformers import SentenceTransformer
-
+from quality import annotate_memories
 
 CHROMA_PATH = "chroma_db"
 COLLECTION_NAME = "personal_memory"
