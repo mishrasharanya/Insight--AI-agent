@@ -1,7 +1,19 @@
-I noticed that warm introductions usually lead to better responses than cold job applications.
+Warm introductions usually lead to better responses than cold job applications.
 
-When I apply directly through company portals, I rarely hear back.
+When I apply directly through company portals, I rarely hear back or get rejected because of sponsorship concerns.
 
-I feel more confident after building AI and data projects that I can explain clearly.
+Building AI and data projects makes me feel more confident because I can explain my technical work clearly.
 
-ForeQuest helped me understand forecasting, volatility modeling, Streamlit deployment and LLM explanation layers.
+ForeQuest helped me understand forecasting, volatility modeling, Streamlit deployment, and LLM explanation layers.
+
+The PI Agent project is helping me understand RAG, ChromaDB, embeddings, chunking, retrieval, confidence scoring, and multi-agent systems.
+
+I want to grow toward AI engineering and data engineering roles where I can build real systems, not just dashboards.
+
+I am especially interested in projects that combine data pipelines, machine learning models, LLMs, APIs, and deployment.
+
+For job applications, I want to focus more on networking, referrals, recruiter conversations, and startup opportunities.
+
+A good AI system should not just answer confidently. It should explain what evidence it used and when it is uncertain.
+
+Calibration means the system’s confidence should match the quality of evidence available.

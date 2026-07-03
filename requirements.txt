@@ -1,3 +1,5 @@
 chromadb
 sentence-transformers
 pandas
+python-dotenv
+groq

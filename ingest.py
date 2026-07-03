@@ -1,3 +1,5 @@
+# ingest.py = build memory database
+
 import os
 import hashlib
 from pathlib import Path
@@ -11,7 +13,7 @@ CHROMA_PATH = "chroma_db"
 COLLECTION_NAME = "personal_memory"
 DATA_FOLDER = "data"
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
+embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
 def get_file_hash(file_path):
@@ -29,16 +31,15 @@ def read_csv_file(file_path):
 
     rows_as_text = []
 
-    for index, row in df.iterrows():
+    for _, row in df.iterrows():
         row_text = []
 
         for column in df.columns:
-            value = row[column]
-            row_text.append(f"{column}: {value}")
+            row_text.append(f"{column}: {row[column]}")
 
         rows_as_text.append(" | ".join(row_text))
 
-    return "\n".join(rows_as_text)
+    return "\n\n".join(rows_as_text)
 
 
 def load_document(file_path):
@@ -47,23 +48,22 @@ def load_document(file_path):
     if extension in [".txt", ".md"]:
         return read_text_file(file_path)
 
-    elif extension == ".csv":
+    if extension == ".csv":
         return read_csv_file(file_path)
 
-    else:
-        print(f"Skipping unsupported file type: {file_path}")
-        return None
+    print(f"Skipping unsupported file type: {file_path}")
+    return None
 
 
-def chunk_text(text, chunk_size=100, overlap=20):
-    words = text.split()
+def chunk_text(text):
+    paragraphs = text.split("\n\n")
     chunks = []
 
-    step = chunk_size - overlap
+    for paragraph in paragraphs:
+        clean_paragraph = paragraph.strip()
 
-    for i in range(0, len(words), step):
-        chunk = " ".join(words[i:i + chunk_size])
-        chunks.append(chunk)
+        if clean_paragraph:
+            chunks.append(clean_paragraph)
 
     return chunks
 
@@ -85,9 +85,7 @@ def main():
 
         file_hash = get_file_hash(file_path)
 
-        existing = collection.get(
-            where={"source": file_path}
-        )
+        existing = collection.get(where={"source": file_path})
 
         if existing["metadatas"]:
             old_hash = existing["metadatas"][0].get("file_hash")
@@ -96,17 +94,14 @@ def main():
                 print(f"Skipping unchanged file: {filename}")
                 continue
 
-            collection.delete(
-                where={"source": file_path}
-            )
-
+            collection.delete(where={"source": file_path})
             print(f"Updated file detected. Re-indexing: {filename}")
 
         chunks = chunk_text(text)
 
         for i, chunk in enumerate(chunks):
             chunk_id = f"{file_path}_chunk_{i}"
-            embedding = model.encode(chunk).tolist()
+            embedding = embedding_model.encode(chunk).tolist()
 
             collection.add(
                 ids=[chunk_id],
