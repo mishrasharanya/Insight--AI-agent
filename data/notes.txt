@@ -1,19 +1,19 @@
-Warm introductions usually lead to better responses than cold job applications.
+I don't drink coffee anymore, I switched to green tea about a year ago because coffee was giving me headaches.
 
-When I apply directly through company portals, I rarely hear back or get rejected because of sponsorship concerns.
+Grabbed coffee with Sam today at the new place downtown. It was actually really good, might start going more often.
 
-Building AI and data projects makes me feel more confident because I can explain my technical work clearly.
+Started learning guitar this year. Practicing about 20 minutes a day, mostly working on basic chords like G, C, and D.
 
-ForeQuest helped me understand forecasting, volatility modeling, Streamlit deployment, and LLM explanation layers.
+My favorite color is blue, specifically a deep navy blue. Always has been since I was a kid.
 
-The PI Agent project is helping me understand RAG, ChromaDB, embeddings, chunking, retrieval, confidence scoring, and multi-agent systems.
+Went for a run.
 
-I want to grow toward AI engineering and data engineering roles where I can build real systems, not just dashboards.
+Finished reading a book about habit formation. The main idea was that habits form through cue, routine, reward loops, and that stacking new habits onto existing ones makes them stick better.
 
-I am especially interested in projects that combine data pipelines, machine learning models, LLMs, APIs, and deployment.
+I'm allergic to peanuts, found out the hard way at a birthday party when I was seven. Carry an EpiPen just in case.
 
-For job applications, I want to focus more on networking, referrals, recruiter conversations, and startup opportunities.
+Meeting moved to 3pm.
 
-A good AI system should not just answer confidently. It should explain what evidence it used and when it is uncertain.
+Been feeling more tired than usual lately, probably need to look at my sleep schedule. Going to bed around 1am most nights which is later than I'd like.
 
-Calibration means the system’s confidence should match the quality of evidence available.
+I work as a software engineer, mostly backend systems, currently using Python and Go at my job.

@@ -1,6 +1,7 @@
 # ingest.py = build memory database
 
 import os
+import re
 import hashlib
 from datetime import datetime
 from pathlib import Path
@@ -109,6 +110,40 @@ def get_file_dates(file_path):
     return date_modified, date_ingested
 
 
+MONTH_NAMES = {
+    "january": 1, "february": 2, "march": 3, "april": 4,
+    "may": 5, "june": 6, "july": 7, "august": 8,
+    "september": 9, "october": 10, "november": 11, "december": 12
+}
+
+
+def extract_content_date(text):
+    """
+    Tries to find a real date mentioned inside the chunk's own text.
+    Checks for ISO dates (YYYY-MM-DD) first, then "Month YYYY" headers.
+    Returns an ISO date string, or None if no date is found.
+    """
+    iso_match = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", text)
+    if iso_match:
+        try:
+            found_date = datetime(int(iso_match.group(1)), int(iso_match.group(2)), int(iso_match.group(3)))
+            return found_date.isoformat()
+        except ValueError:
+            pass  # invalid date like month 13, fall through
+
+    month_match = re.search(
+        r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b",
+        text,
+        re.IGNORECASE
+    )
+    if month_match:
+        month_num = MONTH_NAMES[month_match.group(1).lower()]
+        year_num = int(month_match.group(2))
+        return datetime(year_num, month_num, 1).isoformat()
+
+    return None
+
+
 def cleanup_deleted_files(collection, current_files):
     """Remove chunks for any source file no longer present in the data folder."""
     all_records = collection.get(include=["metadatas"])
@@ -166,6 +201,11 @@ def main():
             chunk_id = f"{file_path}_chunk_{i}"
             embedding = embedding_model.encode(chunk).tolist()
 
+            # Prefer a real date found inside the chunk's own text (e.g. CSV row date,
+            # or a "January 2025" journal header) over the file's modification time.
+            content_date = extract_content_date(chunk)
+            effective_date = content_date if content_date else date_modified
+
             collection.add(
                 ids=[chunk_id],
                 embeddings=[embedding],
@@ -177,7 +217,9 @@ def main():
                     "file_hash": file_hash,
                     "file_type": Path(file_path).suffix.lower(),
                     "date_modified": date_modified,
-                    "date_ingested": date_ingested
+                    "date_ingested": date_ingested,
+                    "content_date": content_date if content_date else "",
+                    "effective_date": effective_date
                 }]
             )
 
