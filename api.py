@@ -428,5 +428,5 @@ def purge_privacy_data(user_id: str = Depends(get_current_user_id_optional)):
     )
 
 
-if os.path.isdir("static"):
-    app.mount("/", StaticFiles(directory="static", html=True), name="static")
+# if os.path.isdir("static"):
+#     app.mount("/", StaticFiles(directory="static", html=True), name="static")
