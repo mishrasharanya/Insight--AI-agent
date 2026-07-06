@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Insight Agent</title>
+<style>
+  :root {
+    --bg-ink: #14171C; --bg-panel: #1B2027; --bg-elevated: #232933; --border: #2C333D;
+    --text-primary: #EDEDE7; --text-mist: #8A9099;
+    --signal: #5B96A8; --signal-dim: #3E6672; --amber: #C98A3B; --coral: #B25050;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg-ink); color: var(--text-primary); font-family: var(--font-body); font-size: 14px; }
+  #app { display: grid; grid-template-columns: 300px 1fr; height: 100vh; }
+  #sidebar { background: var(--bg-panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 16px; overflow-y: auto; }
+  .brand h1 { font-size: 16px; margin: 0 0 16px; }
+  .eyebrow { font-family: var(--font-mono); font-size: 11px; color: var(--text-mist); text-transform: uppercase; letter-spacing: 0.08em; margin: 20px 0 10px; }
+  .eyebrow:first-of-type { margin-top: 0; }
+
+  .account-box { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  .account-email { font-family: var(--font-mono); font-size: 12px; word-break: break-all; margin-bottom: 8px; }
+  .connect-note { font-size: 11.5px; color: var(--text-mist); line-height: 1.5; margin-bottom: 10px; }
+
+  a.google-btn {
+    display: block; text-align: center; text-decoration: none;
+    background: var(--signal-dim); border: 1px solid var(--signal); color: var(--text-primary);
+    padding: 9px; border-radius: 6px; font-size: 12.5px; margin-top: 4px;
+  }
+  a.google-btn:hover { background: var(--signal); }
+
+  button.primary, button.ghost, button.danger {
+    width: 100%; padding: 8px 10px; border-radius: 6px; font-size: 12.5px;
+    cursor: pointer; margin-top: 8px; font-family: var(--font-body);
+  }
+  button.primary { background: var(--signal-dim); border: 1px solid var(--signal); color: var(--text-primary); }
+  button.primary:hover { background: var(--signal); }
+  button.ghost { background: transparent; border: 1px solid var(--border); color: var(--text-primary); }
+  button.ghost:hover { border-color: var(--text-mist); }
+  button.danger { background: transparent; border: 1px solid var(--coral); color: var(--coral); }
+  button.danger:hover { background: var(--coral); color: var(--bg-ink); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .sync-status { font-size: 11px; color: var(--text-mist); margin-top: 6px; font-family: var(--font-mono); }
+
+  #inventory-box {
+    margin-top: 10px; padding: 8px 9px; background: var(--bg-elevated); border: 1px solid var(--border);
+    border-radius: 6px; font-size: 11.5px; color: var(--text-mist); max-height: 160px; overflow-y: auto;
+  }
+  #inventory-box .source-line { font-family: var(--font-mono); color: var(--text-primary); margin: 3px 0; }
+
+  .sidebar-footer { margin-top: auto; padding-top: 16px; font-size: 11px; color: var(--text-mist); line-height: 1.5; }
+
+  #main { display: flex; flex-direction: column; height: 100vh; }
+  #chat-scroll { flex: 1; overflow-y: auto; padding: 28px 40px; }
+  .welcome { max-width: 520px; margin: 60px auto 0; text-align: center; color: var(--text-mist); }
+  .welcome h2 { color: var(--text-primary); font-weight: 500; font-size: 20px; margin-bottom: 6px; }
+  .msg { max-width: 640px; margin: 0 auto 18px; }
+  .msg.user { display: flex; justify-content: flex-end; }
+  .msg.user .bubble { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px 10px 2px 10px; padding: 10px 14px; max-width: 80%; }
+  .msg.assistant .bubble { padding: 2px 2px 0; }
+  .msg.assistant .answer-text { line-height: 1.5; white-space: pre-wrap; }
+  .meter-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .meter { display: flex; gap: 3px; }
+  .meter .seg { width: 16px; height: 4px; border-radius: 2px; background: var(--border); }
+  .meter .seg.filled.high { background: var(--signal); }
+  .meter .seg.filled.medium { background: var(--amber); }
+  .meter .seg.filled.low { background: var(--coral); }
+  .meter-label { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-mist); text-transform: uppercase; letter-spacing: 0.06em; }
+  .thinking { color: var(--text-mist); font-size: 13px; font-style: italic; }
+  #input-row { display: flex; gap: 10px; padding: 16px 40px 22px; border-top: 1px solid var(--border); }
+  #question-input { flex: 1; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); padding: 11px 14px; font-size: 14px; font-family: var(--font-body); }
+  #question-input:focus { outline: none; border-color: var(--signal); }
+  #send-btn { background: var(--signal-dim); border: 1px solid var(--signal); color: var(--text-primary); border-radius: 8px; padding: 0 20px; font-size: 13.5px; cursor: pointer; }
+  #send-btn:hover { background: var(--signal); }
+  #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+</style>
+</head>
+<body>
+<script src="https://apis.google.com/js/api.js"></script>
+
+<div id="app">
+  <div id="sidebar">
+    <div class="brand"><h1>Insight Agent</h1></div>
+
+    <div class="eyebrow">Account</div>
+    <div id="account-area"><div class="account-box"><div class="connect-note">Checking login…</div></div></div>
+
+    <div class="eyebrow">Sync</div>
+    <button class="ghost" id="sync-calendar-btn" disabled>Sync Google Calendar</button>
+    <button class="ghost" id="sync-drive-btn" disabled>Choose Drive files to sync…</button>
+    <div class="sync-status" id="sync-status"></div>
+
+    <div class="eyebrow">Privacy</div>
+    <button class="ghost" id="inventory-btn" disabled>Show what's stored</button>
+    <div id="inventory-box" style="display:none;"></div>
+    <button class="danger" id="purge-btn" disabled>Delete my stored data</button>
+
+    <div class="sidebar-footer">
+      Only read-only access is requested. Your data is stored in your own
+      isolated collection - not visible to other testers.
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="chat-scroll">
+      <div class="welcome" id="welcome">
+        <h2>Connect your Google account to start surfacing insights</h2>
+        <p>Sync your calendar and Drive docs on the left, then ask what patterns, themes, or changes you want to understand.</p>
+      </div>
+    </div>
+    <div id="input-row">
+      <input id="question-input" type="text" placeholder="What do you want to understand about your documents?" disabled />
+      <button id="send-btn" disabled>Send</button>
+    </div>
+  </div>
+</div>
+
+<script>
+async function apiGet(path) {
+  const res = await fetch(path, { credentials: "same-origin" });
+  if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+  return res.json();
+}
+async function apiPost(path, payload) {
+  const res = await fetch(path, {
+    method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+  if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+  return res.json();
+}
+
+let loggedIn = false;
+
+function setControlsEnabled(enabled) {
+  document.getElementById("sync-calendar-btn").disabled = !enabled;
+  document.getElementById("sync-drive-btn").disabled = !enabled;
+  document.getElementById("inventory-btn").disabled = !enabled;
+  document.getElementById("purge-btn").disabled = !enabled;
+  document.getElementById("question-input").disabled = !enabled;
+  document.getElementById("send-btn").disabled = !enabled;
+}
+
+async function refreshAccountArea() {
+  const area = document.getElementById("account-area");
+  const status = await apiGet("/auth/me");
+  loggedIn = status.logged_in;
+
+  if (!loggedIn) {
+    area.innerHTML = `
+      <div class="account-box">
+        <div class="connect-note">Not connected yet.</div>
+        <a class="google-btn" href="/auth/google/login">Connect Google account</a>
+      </div>
+    `;
+    setControlsEnabled(false);
+    return;
+  }
+
+  area.innerHTML = `
+    <div class="account-box">
+      <div class="account-email">${status.email}</div>
+      <button class="ghost" id="logout-btn">Disconnect</button>
+    </div>
+  `;
+  document.getElementById("logout-btn").addEventListener("click", async () => {
+    await apiPost("/auth/logout", {});
+    window.location.reload();
+  });
+
+  setControlsEnabled(true);
+}
+
+async function syncCalendar() {
+  const btn = document.getElementById("sync-calendar-btn");
+  const status = document.getElementById("sync-status");
+  btn.disabled = true; btn.textContent = "Syncing calendar…";
+  try {
+    const result = await apiPost("/sync/calendar", {});
+    status.textContent = `Calendar: ${result.events_synced} events, ${result.chunks_added} chunks added.`;
+  } catch (e) {
+    status.textContent = `Calendar sync failed: ${e.message}`;
+  } finally {
+    btn.disabled = false; btn.textContent = "Sync Google Calendar";
+  }
+}
+
+let pickerLoaded = false;
+
+function ensurePickerLoaded() {
+  return new Promise((resolve) => {
+    if (pickerLoaded) return resolve();
+    gapi.load("picker", () => {
+      pickerLoaded = true;
+      resolve();
+    });
+  });
+}
+
+async function syncDrive() {
+  const btn = document.getElementById("sync-drive-btn");
+  const status = document.getElementById("sync-status");
+
+  btn.disabled = true;
+  btn.textContent = "Opening picker…";
+
+  try {
+    const tokenInfo = await apiGet("/auth/google/picker-token");
+    await ensurePickerLoaded();
+
+    const view = new google.picker.DocsView()
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(false);
+
+    const picker = new google.picker.PickerBuilder()
+        .addView(view)
+        .setOAuthToken(tokenInfo.access_token)
+        .setDeveloperKey(tokenInfo.developer_key)
+        .setAppId(tokenInfo.app_id)
+        .setCallback((data) => pickerCallback(data, status, btn))
+        .build();
+
+    picker.setVisible(true);
+    btn.textContent = "Choose Drive files to sync…";
+  } catch (e) {
+    status.textContent = `Could not open picker: ${e.message}`;
+    btn.textContent = "Choose Drive files to sync…";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function pickerCallback(data, status, btn) {
+  if (data.action !== google.picker.Action.PICKED) return;
+
+  const files = data.docs.map((doc) => ({
+    id: doc.id,
+    name: doc.name,
+    mimeType: doc.mimeType,
+  }));
+
+  status.textContent = `Syncing ${files.length} file(s)…`;
+
+  try {
+    const result = await apiPost("/sync/drive", { files });
+    status.textContent = `Drive: ${result.files_synced} file(s), ${result.chunks_added} chunks added.`;
+  } catch (e) {
+    status.textContent = `Drive sync failed: ${e.message}`;
+  }
+}
+
+async function showInventory() {
+  const box = document.getElementById("inventory-box");
+  box.style.display = "block";
+  box.textContent = "Loading…";
+  try {
+    const inventory = await apiGet("/privacy/inventory");
+    if (!inventory.chroma_db_exists || inventory.total_chunks === 0) {
+      box.textContent = "No data stored yet.";
+      return;
+    }
+    box.innerHTML = `<div>${inventory.total_chunks} chunk(s) stored</div>`;
+    (inventory.sources || []).forEach((source) => {
+      const line = document.createElement("div");
+      line.className = "source-line";
+      const filename = source.filename || source.source || "unknown";
+      line.textContent = `${filename} — ${source.chunk_count} chunk(s)`;
+      box.appendChild(line);
+    });
+  } catch (e) {
+    box.textContent = `Could not load inventory: ${e.message}`;
+  }
+}
+
+async function purgeData() {
+  if (!confirm("Delete all of your stored data? This cannot be undone.")) return;
+  try {
+    const result = await apiPost("/privacy/purge", {});
+    alert(result.message);
+    document.getElementById("inventory-box").style.display = "none";
+  } catch (e) {
+    alert(`Delete failed: ${e.message}`);
+  }
+}
+
+function confidenceSegments(tier) {
+  if (tier === "high") return 3;
+  if (tier === "medium") return 2;
+  if (tier === "low") return 1;
+  return 0;
+}
+function renderMeter(tier) {
+  const segCount = confidenceSegments(tier);
+  const cssClass = ["high", "medium", "low"].includes(tier) ? tier : "";
+  let segsHtml = "";
+  for (let i = 0; i < 3; i++) segsHtml += `<div class="seg ${i < segCount ? `filled ${cssClass}` : ""}"></div>`;
+  return `<div class="meter-row"><div class="meter">${segsHtml}</div><div class="meter-label">confidence: ${tier}</div></div>`;
+}
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+function appendUserMessage(text) {
+  document.getElementById("welcome")?.remove();
+  const scroll = document.getElementById("chat-scroll");
+  const msg = document.createElement("div");
+  msg.className = "msg user";
+  msg.innerHTML = `<div class="bubble">${escapeHtml(text)}</div>`;
+  scroll.appendChild(msg);
+  scroll.scrollTop = scroll.scrollHeight;
+}
+function appendThinking() {
+  const scroll = document.getElementById("chat-scroll");
+  const msg = document.createElement("div");
+  msg.className = "msg assistant"; msg.id = "thinking-msg";
+  msg.innerHTML = `<div class="bubble"><span class="thinking">Thinking…</span></div>`;
+  scroll.appendChild(msg);
+  scroll.scrollTop = scroll.scrollHeight;
+}
+function replaceThinkingWithAnswer(answer, route, tier) {
+  const thinkingMsg = document.getElementById("thinking-msg");
+  const scroll = document.getElementById("chat-scroll");
+  const msg = document.createElement("div");
+  msg.className = "msg assistant";
+  msg.innerHTML = `<div class="bubble"><div class="answer-text">${escapeHtml(answer)}</div>${renderMeter(tier)}<div class="meter-label" style="margin-top:2px;">route: ${route}</div></div>`;
+  if (thinkingMsg) thinkingMsg.replaceWith(msg); else scroll.appendChild(msg);
+  scroll.scrollTop = scroll.scrollHeight;
+}
+
+async function sendMessage() {
+  if (!loggedIn) return;
+  const input = document.getElementById("question-input");
+  const sendBtn = document.getElementById("send-btn");
+  const question = input.value.trim();
+  if (!question) return;
+
+  appendUserMessage(question);
+  input.value = "";
+  sendBtn.disabled = true;
+  appendThinking();
+
+  try {
+    const result = await apiPost("/chat", { question });
+    replaceThinkingWithAnswer(result.answer || "I could not generate an answer.", result.route || "unknown", result.confidence_tier || "unknown");
+  } catch (e) {
+    replaceThinkingWithAnswer(`Something went wrong: ${e.message}`, "error", "low");
+  } finally {
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+document.getElementById("sync-calendar-btn").addEventListener("click", syncCalendar);
+document.getElementById("sync-drive-btn").addEventListener("click", syncDrive);
+document.getElementById("inventory-btn").addEventListener("click", showInventory);
+document.getElementById("purge-btn").addEventListener("click", purgeData);
+document.getElementById("send-btn").addEventListener("click", sendMessage);
+document.getElementById("question-input").addEventListener("keydown", (e) => { if (e.key === "Enter") sendMessage(); });
+
+refreshAccountArea();
+</script>
+</body>
+</html>

@@ -94,3 +94,42 @@ def evidence_confidence_tier(evidence):
         return "medium"
 
     return "low"
+
+
+# ---------- Diagnostic helper (temporary - not called anywhere by default) ----------
+#
+# Run this against a batch of retrieved memories to see the RAW numbers behind
+# every confidence score - distance, similarity, quality_overall, and the
+# final blended confidence. This is what you need before touching the
+# thresholds above: guessing new threshold values without seeing the actual
+# distribution of distances your embeddings produce risks overcorrecting in
+# the other direction (e.g. everything becomes "high").
+#
+# Usage from a Python shell or a quick script:
+#
+#   import chat, confidence
+#   memories = chat.retrieve_memories("your test question here")
+#   from quality import annotate_memories
+#   memories = annotate_memories(memories)
+#   confidence.print_confidence_breakdown(memories)
+
+def print_confidence_breakdown(memories):
+    print(f"\n{'FILE':<28} {'DISTANCE':<10} {'SIMILARITY':<12} {'QUALITY':<10} {'CONFIDENCE':<12} {'TIER':<8}")
+    print("-" * 82)
+
+    for memory in memories:
+        filename = memory.get("metadata", {}).get("filename", "unknown")
+        distance = memory.get("distance", "n/a")
+        similarity = distance_to_similarity(memory.get("distance", 999))
+        quality_overall = memory.get("quality", {}).get("overall", "n/a")
+        confidence_score = calculate_memory_confidence(memory)
+        tier = get_confidence_tier(confidence_score)
+
+        print(
+            f"{filename[:26]:<28} "
+            f"{str(distance)[:8]:<10} "
+            f"{similarity:<12} "
+            f"{str(quality_overall)[:8]:<10} "
+            f"{confidence_score:<12} "
+            f"{tier:<8}"
+        )

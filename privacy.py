@@ -1,9 +1,16 @@
-# privacy.py = Privacy & Safety Layer for PI Agent
-# Goal: use personal data temporarily, but never store raw sensitive data.
+# privacy.py = Privacy & Safety Layer for the Insight Agent
+# Goal: use personal data temporarily, never store raw sensitive data beyond
+# the stored data itself, and give the user full visibility into and
+# control over what's actually stored - nothing hidden, nothing they can't
+# inspect or delete themselves.
 
 import re
 import hashlib
 from datetime import datetime
+
+from supabase_client import get_client
+
+DEFAULT_COLLECTION_NAME = "personal_memory"
 
 
 SENSITIVE_PATTERNS = {
@@ -34,6 +41,13 @@ def redact_sensitive_text(text):
     """
     Redacts common personal identifiers before text is sent to the LLM
     or stored in logs.
+
+    LIMITATION: this is regex-based, so it only catches structured/patterned
+    identifiers (emails, phone numbers, etc). It does NOT catch names,
+    employers, health details, or other personal info written in free-form
+    prose. Don't treat this as "nothing sensitive reaches the LLM" - the
+    stored content itself is sent unredacted, by design, since that's what
+    the agent needs to function.
     """
     if not text:
         return ""
@@ -135,3 +149,146 @@ def requires_user_confirmation(action_type):
     }
 
     return action_type in write_actions
+
+
+# ---------- Transparency & control: see and delete what's actually stored ----------
+
+def get_data_inventory(collection_name=None):
+    """
+    Returns exactly what personal data is currently stored, so nothing about
+    what's in Supabase is hidden or has to be taken on faith. Reads the
+    `chunks` table directly, filtered by collection_name, rather than
+    summarizing from memory.
+
+    collection_name: pass the logged-in user's own collection (see
+    google_sync.collection_name_for) in multi-user hosted mode, so this only
+    reports THAT user's data - never another tester's. Defaults to the
+    shared "personal_memory" collection for desktop/single-user use.
+
+    NOTE: the "chroma_db_exists" key name is kept as-is even though Chroma
+    is gone - index.html's frontend JS checks this exact key
+    (inventory.chroma_db_exists), and renaming it here without also editing
+    the frontend would silently break the inventory display. Read it as
+    "stored data is reachable", not literally about Chroma.
+    """
+    target_collection = collection_name or DEFAULT_COLLECTION_NAME
+    client = get_client()
+
+    try:
+        response = (
+            client.table("chunks")
+            .select("filename, created_at")
+            .eq("collection_name", target_collection)
+            .execute()
+        )
+    except Exception as error:
+        return {
+            "chroma_db_exists": True,
+            "error": f"Could not read stored data: {error}",
+            "sources": [],
+            "total_chunks": 0,
+        }
+
+    rows = response.data or []
+
+    if not rows:
+        return {
+            "chroma_db_exists": False,
+            "sources": [],
+            "total_chunks": 0,
+        }
+
+    sources = {}
+    for row in rows:
+        filename = row.get("filename", "unknown")
+        sources.setdefault(filename, {"chunk_count": 0, "last_ingested": None})
+        sources[filename]["chunk_count"] += 1
+
+        created = row.get("created_at")
+        if created and (
+            sources[filename]["last_ingested"] is None
+            or created > sources[filename]["last_ingested"]
+        ):
+            sources[filename]["last_ingested"] = created
+
+    return {
+        "chroma_db_exists": True,
+        "sources": [{"filename": name, **info} for name, info in sources.items()],
+        "total_chunks": len(rows),
+    }
+
+
+def print_data_inventory(collection_name=None):
+    """Human-readable version of get_data_inventory(), for the user to run anytime."""
+    inventory = get_data_inventory(collection_name=collection_name)
+
+    if not inventory["chroma_db_exists"]:
+        print("No stored data found. Nothing is stored.")
+        return
+
+    if "error" in inventory:
+        print(f"Could not read stored data: {inventory['error']}")
+        return
+
+    if inventory["total_chunks"] == 0:
+        print("Nothing is stored yet.")
+        return
+
+    print(f"Total stored chunks: {inventory['total_chunks']}\n")
+    print("Sources:")
+    for source in inventory["sources"]:
+        print(
+            f"  - {source['filename']}: {source['chunk_count']} chunk(s), "
+            f"last ingested {source['last_ingested']}"
+        )
+
+
+def purge_all_local_data(confirm=False, collection_name=None):
+    """
+    Deletes stored data for one collection. Irreversible. Requires
+    confirm=True so this can't be triggered accidentally by an LLM call or
+    a stray function call.
+
+    collection_name: THE CRITICAL PARAMETER IN MULTI-USER MODE. Pass the
+    logged-in user's own collection (see google_sync.collection_name_for)
+    to delete only that user's rows.
+
+    IMPORTANT BEHAVIOR CHANGE from the old Chroma-backed version: when
+    collection_name is omitted, this used to wipe the ENTIRE local
+    chroma_db/ folder - safe back when that folder only ever held one
+    person's data on their own machine. On a shared Supabase backend there
+    is no "just my folder" equivalent, so omitting collection_name now
+    scopes the delete to the DEFAULT_COLLECTION_NAME ("personal_memory")
+    specifically - NOT every row in the table. Do not change this to an
+    unscoped delete, or one purge call could remove every user's data.
+    """
+    if not confirm:
+        return {
+            "purged": False,
+            "message": "Purge not run - call purge_all_local_data(confirm=True) to actually delete data.",
+        }
+
+    target_collection = collection_name or DEFAULT_COLLECTION_NAME
+    client = get_client()
+
+    try:
+        client.table("chunks").delete().eq("collection_name", target_collection).execute()
+        client.table("structured_rows").delete().eq("collection_name", target_collection).execute()
+    except Exception as error:
+        return {"purged": False, "message": f"Could not delete your data: {error}"}
+
+    return {
+        "purged": True,
+        "message": "Deleted your stored data. Re-sync Calendar/Drive, or re-run ingest.py, to rebuild it.",
+    }
+
+
+if __name__ == "__main__":
+    # Run this file directly anytime to see or wipe exactly what's stored -
+    # no need to trust a description of it, check it yourself.
+    print("===== Insight Agent Privacy Check =====\n")
+    print_data_inventory()
+
+    print("\nTo delete ALL stored data for the default collection, run this in Python:")
+    print("  from privacy import purge_all_local_data")
+    print("  purge_all_local_data(confirm=True)")

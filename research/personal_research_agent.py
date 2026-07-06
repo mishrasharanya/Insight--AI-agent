@@ -50,7 +50,14 @@ def calculate_overall_confidence(evidence, has_gap, answer=None):
     return "low"
 
 
-def run_personal_research(question, top_k_per_question=3):
+def run_personal_research(question, top_k_per_question=3, collection_name=None):
+    """
+    collection_name: pass a per-user collection (see google_sync.collection_name_for)
+    to scope every retrieval call below to one person's own synced data.
+    Defaults to None, which retrieve_memories() should treat the same way
+    chat.py's retrieve_memories() does - falling back to the original shared
+    COLLECTION_NAME for desktop/single-user use, unchanged from before.
+    """
     sub_questions = create_research_plan(question)
 
     all_memories = []
@@ -59,7 +66,8 @@ def run_personal_research(question, top_k_per_question=3):
         print(f"[Personal Research] Searching: {sub_question}")
         memories = retrieve_memories(
             sub_question,
-            top_k=top_k_per_question
+            top_k=top_k_per_question,
+            collection_name=collection_name,
         )
         all_memories.extend(memories)
 
@@ -74,7 +82,8 @@ def run_personal_research(question, top_k_per_question=3):
 
         second_pass_memories = retrieve_memories(
             second_pass_query,
-            top_k=5
+            top_k=5,
+            collection_name=collection_name,
         )
 
         second_pass_evidence = collect_evidence(second_pass_memories)

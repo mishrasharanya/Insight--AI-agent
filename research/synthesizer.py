@@ -2,12 +2,11 @@ import os
 from dotenv import load_dotenv
 from groq import Groq
 from privacy import redact_sensitive_text
+from constants import NOT_FOUND_MESSAGE
 
 load_dotenv()
 
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-
-NOT_FOUND_MESSAGE = "Information not recorded. Can you give more information?"
 
 
 def format_evidence(evidence):
