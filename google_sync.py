@@ -157,10 +157,10 @@ def _extract_drive_file_text(service, file_id, mime_type):
 
     return content.decode("utf-8", errors="ignore") if isinstance(content, bytes) else str(content)
 
-
 def sync_drive_files(user_id, credentials, picked_files):
-    service = build("drive", "v3", credentials=credentials)
+    import traceback
 
+    service = build("drive", "v3", credentials=credentials)
     total_chunks = 0
     files_synced = 0
     files_skipped = 0
@@ -169,25 +169,22 @@ def sync_drive_files(user_id, credentials, picked_files):
         file_id = file.get("id")
         name = file.get("name", "untitled")
         mime_type = file.get("mimeType", "")
-
         if not file_id:
             continue
 
         try:
             text = _extract_drive_file_text(service, file_id, mime_type)
+            chunks_added = _upsert_chunks(
+                user_id=user_id,
+                source_label=f"drive:{name}",
+                text=text,
+                extra_metadata={"file_type": mime_type},
+            )
         except Exception as error:
-            print(f"[drive sync] skipped '{name}': {error}")
+            print(f"[drive sync] failed on '{name}' ({mime_type}): {error}")
+            traceback.print_exc()
             files_skipped += 1
             continue
-
-        chunks_added = _upsert_chunks(
-            user_id=user_id,
-            source_label=f"drive:{name}",
-            text=text,
-            extra_metadata={
-                "file_type": mime_type,
-            },
-        )
 
         if chunks_added:
             files_synced += 1
