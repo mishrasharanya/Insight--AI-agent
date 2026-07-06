@@ -5,13 +5,13 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
-from sentence_transformers import SentenceTransformer
 from pypdf import PdfReader
 from docx import Document
 from pptx import Presentation
 from openpyxl import load_workbook
 
 from supabase_client import get_client
+from embedding_client import embed_text
 
 COLLECTION_NAME = "personal_memory"
 DATA_FOLDER = "data"
@@ -23,11 +23,7 @@ SUPPORTED_EXTENSIONS = {
     ".docx", ".pptx", ".xlsx", ".json"
 }
 
-# File types that also get structured-row extraction for charting,
-# in addition to the normal text chunking every file type gets.
 STRUCTURED_EXTENSIONS = {".csv", ".xlsx"}
-
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
 def load_data_folders():
@@ -174,22 +170,16 @@ def load_document(file_path):
     return read_file(Path(file_path))
 
 
-# ---------- Structured row extraction (new - for charts) ----------
-# NOTE: kept deliberately separate from read_csv_file/read_xlsx_file above.
-# Those two produce flattened text for embedding/chunking - this produces
-# typed row data for the structured_rows table, which a charts endpoint
-# can query directly without going through the LLM or chunked text at all.
-
 def extract_csv_rows(file_path):
     df = pd.read_csv(file_path)
     rows = []
 
     for index, row in df.iterrows():
         row_dict = {}
+
         for column in df.columns:
             value = row[column]
-            # Keep JSON-serializable types only - pandas/numpy scalars
-            # don't serialize cleanly otherwise.
+
             if pd.isna(value):
                 row_dict[column] = None
             elif isinstance(value, (int, float, str, bool)):
@@ -226,6 +216,7 @@ def extract_xlsx_rows(file_path):
                 continue
 
             row_dict = {}
+
             for column, value in zip(header, row):
                 if value is None:
                     row_dict[column] = None
@@ -300,16 +291,10 @@ def get_all_files_from_folders(folders):
 
 
 def upsert_chunks(client, collection_name, file_path, chunks, file_hash, effective_date):
-    """
-    Embeds and upserts text chunks into the `chunks` table. Mirrors the
-    dedup behavior the old Chroma `collection.upsert()` gave for free -
-    the (collection_name, file_hash, chunk_index) unique constraint means
-    re-ingesting an unchanged file overwrites rather than duplicates.
-    """
     records = []
 
     for index, chunk in enumerate(chunks):
-        embedding = embedding_model.encode(chunk).tolist()
+        embedding = embed_text(chunk)
 
         records.append({
             "collection_name": collection_name,
@@ -333,12 +318,6 @@ def upsert_chunks(client, collection_name, file_path, chunks, file_hash, effecti
 
 
 def upsert_structured_rows(client, collection_name, file_path, effective_date):
-    """
-    Extracts and stores typed rows from csv/xlsx files for the charts
-    endpoint. Unlike `chunks`, there's no dedup constraint here yet - if
-    you re-ingest the same file repeatedly, you'll get duplicate rows.
-    Fine for now, but worth revisiting once re-ingestion is a common flow.
-    """
     rows = extract_structured_rows(file_path)
 
     if not rows:
@@ -361,12 +340,6 @@ def upsert_structured_rows(client, collection_name, file_path, effective_date):
 
 
 def ingest_files(collection_name=None):
-    """
-    collection_name: same role it plays everywhere else in the codebase -
-    defaults to the shared COLLECTION_NAME for desktop/single-user use,
-    or pass a per-user string for Google-synced ingestion (see
-    google_sync.collection_name_for).
-    """
     collection_name = collection_name or COLLECTION_NAME
     client = get_client()
 
@@ -398,13 +371,25 @@ def ingest_files(collection_name=None):
             file_hash = get_file_hash(file_path)
             effective_date = get_effective_date(file_path)
 
-            count = upsert_chunks(client, collection_name, file_path, chunks, file_hash, effective_date)
+            count = upsert_chunks(
+                client,
+                collection_name,
+                file_path,
+                chunks,
+                file_hash,
+                effective_date,
+            )
             total_chunks += count
 
         if file_path.suffix.lower() in STRUCTURED_EXTENSIONS:
             try:
                 effective_date = get_effective_date(file_path)
-                row_count = upsert_structured_rows(client, collection_name, file_path, effective_date)
+                row_count = upsert_structured_rows(
+                    client,
+                    collection_name,
+                    file_path,
+                    effective_date,
+                )
                 total_structured_rows += row_count
             except Exception as error:
                 print(f"Failed to extract structured rows from {file_path}: {error}")

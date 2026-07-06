@@ -1,38 +1,40 @@
-groq
-langgraph
-langchain
-
-sentence-transformers
-torch
-supabase
+fastapi
+uvicorn[standard]
 
 python-dotenv
+python-multipart
+
+groq
+
+google-genai
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
+
+supabase
+
+langchain
+langgraph
 
 pandas
 numpy
-scikit-learn
 
-streamlit
+openpyxl
+XlsxWriter
 
-pypdf
 python-docx
 python-pptx
-openpyxl
-
+pypdf
 odfpy
-striprtf
+
 beautifulsoup4
 lxml
 
-tqdm
-requests
-
-fastapi
-uvicorn
-pydantic
-
-google-auth 
-google-auth-oauthlib 
-google-api-python-client 
-itsdangerous
 cryptography
+itsdangerous
+
+requests
+httpx
+
+tqdm
