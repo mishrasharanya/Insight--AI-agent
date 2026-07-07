@@ -1,6 +1,7 @@
 # google_sync.py = pulls Calendar + Drive content into each user's OWN
 # scoped rows in Supabase - never shared ones.
 
+import csv
 import hashlib
 import io
 from datetime import datetime, timedelta
@@ -11,6 +12,13 @@ from pypdf import PdfReader
 from embedding_client import embed_text
 from ingest import chunk_text
 from supabase_client import get_client
+
+
+CSV_MIME = "text/csv"
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+GSHEET_MIME = "application/vnd.google-apps.spreadsheet"
+
+TABULAR_MIME_TYPES = {CSV_MIME, XLSX_MIME, GSHEET_MIME}
 
 
 def collection_name_for(user_id):
@@ -147,6 +155,14 @@ def _extract_drive_file_text(service, file_id, mime_type):
 
         return content.decode("utf-8") if isinstance(content, bytes) else str(content)
 
+    if mime_type == GSHEET_MIME:
+        content = service.files().export(
+            fileId=file_id,
+            mimeType="text/csv",
+        ).execute()
+
+        return content.decode("utf-8") if isinstance(content, bytes) else str(content)
+
     if mime_type == "application/pdf":
         content = service.files().get_media(fileId=file_id).execute()
         reader = PdfReader(io.BytesIO(content))
@@ -157,10 +173,79 @@ def _extract_drive_file_text(service, file_id, mime_type):
 
     return content.decode("utf-8", errors="ignore") if isinstance(content, bytes) else str(content)
 
+
+def _extract_tabular_rows(service, file_id, mime_type):
+    """
+    Returns a list of (sheet_name, rows) tuples for CSV / XLSX / Google Sheets
+    files, where rows is a list of {column_name: value} dicts.
+    Returns [] for non-tabular mime types.
+    """
+    if mime_type == GSHEET_MIME:
+        # Google Sheets export only pulls the first sheet as CSV via this API,
+        # so sheet_name is left as None here.
+        content = service.files().export(
+            fileId=file_id,
+            mimeType="text/csv",
+        ).execute()
+
+        text = content.decode("utf-8") if isinstance(content, bytes) else str(content)
+        reader = csv.DictReader(io.StringIO(text))
+
+        return [(None, list(reader))]
+
+    if mime_type == CSV_MIME:
+        content = service.files().get_media(fileId=file_id).execute()
+        text = content.decode("utf-8", errors="ignore") if isinstance(content, bytes) else str(content)
+        reader = csv.DictReader(io.StringIO(text))
+
+        return [(None, list(reader))]
+
+    if mime_type == XLSX_MIME:
+        import openpyxl
+
+        content = service.files().get_media(fileId=file_id).execute()
+        workbook = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+
+        results = []
+
+        for sheet in workbook.worksheets:
+            rows_iter = sheet.iter_rows(values_only=True)
+
+            try:
+                header_row = next(rows_iter)
+            except StopIteration:
+                continue
+
+            header = [
+                str(cell) if cell is not None else f"column_{i}"
+                for i, cell in enumerate(header_row)
+            ]
+
+            sheet_rows = []
+
+            for row_values in rows_iter:
+                if row_values is None or all(v is None for v in row_values):
+                    continue
+
+                row_dict = {
+                    header[i]: row_values[i]
+                    for i in range(len(header))
+                    if i < len(row_values)
+                }
+                sheet_rows.append(row_dict)
+
+            results.append((sheet.title, sheet_rows))
+
+        return results
+
+    return []
+
+
 def sync_drive_files(user_id, credentials, picked_files):
     import traceback
 
     service = build("drive", "v3", credentials=credentials)
+    collection_name = collection_name_for(user_id)
     total_chunks = 0
     files_synced = 0
     files_skipped = 0
@@ -180,6 +265,22 @@ def sync_drive_files(user_id, credentials, picked_files):
                 text=text,
                 extra_metadata={"file_type": mime_type},
             )
+
+            if mime_type in TABULAR_MIME_TYPES:
+                try:
+                    sheets = _extract_tabular_rows(service, file_id, mime_type)
+
+                    for sheet_name, rows in sheets:
+                        _insert_tabular_rows(
+                            collection_name=collection_name,
+                            filename=name,
+                            rows=rows,
+                            sheet_name=sheet_name,
+                        )
+                except Exception as tabular_error:
+                    print(f"[drive sync] tabular parse failed on '{name}': {tabular_error}")
+                    traceback.print_exc()
+
         except Exception as error:
             print(f"[drive sync] failed on '{name}' ({mime_type}): {error}")
             traceback.print_exc()
@@ -197,3 +298,18 @@ def sync_drive_files(user_id, credentials, picked_files):
         "files_skipped": files_skipped,
         "chunks_added": total_chunks,
     }
+
+
+def _insert_tabular_rows(collection_name, filename, rows, sheet_name=None):
+    if not rows:
+        return
+
+    payload = [{
+        "collection_name": collection_name,
+        "filename": filename,
+        "sheet_name": sheet_name,
+        "row_index": i,
+        "data": row,
+    } for i, row in enumerate(rows)]
+
+    get_client().table("tabular_rows").insert(payload).execute()

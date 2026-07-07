@@ -1,4 +1,6 @@
 import os
+from datetime import datetime, timezone
+from unittest import result
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -157,6 +159,25 @@ def google_callback(code: str, request: Request):
 
     auth_store.save_user(user_id, email, credentials.refresh_token)
 
+    # Upsert into the users table so we have a durable record of who has
+    # logged in, their collection name, and when they last logged in.
+    google_sub = user_id
+
+    try:
+        supabase = get_client()
+        supabase.table("users").upsert(
+            {
+                "email": email,
+                "google_sub": google_sub,
+                "collection_name": google_sync.collection_name_for(google_sub),
+                "last_login_at": datetime.now(timezone.utc).isoformat(),
+            },
+            on_conflict="google_sub",
+        ).execute()
+    except Exception as error:
+        # Don't block login if this write fails - just log it.
+        print(f"[auth] failed to upsert user record for {email}: {error}")
+
     response = RedirectResponse(url=FRONTEND_URL)
 
     response.set_cookie(
@@ -286,9 +307,10 @@ def chat(request: ChatRequest, user_id: str = Depends(get_current_user_id_option
     )
 
     return {
-        "answer": result.get("answer", ""),
-        "route": result.get("route", "unknown"),
-        "confidence_tier": result.get("confidence_tier", "unknown"),
+        "answer": result["answer"],
+        "route": result["route"],
+        "confidence_tier": result["confidence_tier"],
+        "chart": result.get("chart"),
     }
 
 

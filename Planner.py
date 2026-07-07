@@ -1,6 +1,6 @@
 import os
 import time
-from typing import TypedDict, Literal
+from typing import TypedDict, Literal, Optional
 
 from dotenv import load_dotenv
 from groq import Groq, RateLimitError
@@ -17,16 +17,12 @@ import greeting
 
 from research.personal_research_agent import run_personal_research
 
-
 load_dotenv()
-
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
 if GROQ_API_KEY is None:
     raise ValueError("GROQ_API_KEY not found. Add it to your .env file.")
 
 groq_client = Groq(api_key=GROQ_API_KEY)
-
 BROAD_TOP_K = 5
 
 
@@ -36,334 +32,197 @@ class PlannerState(TypedDict):
     answer: str
     confidence_tier: str
     collection_name: str
+    chart: Optional[dict]
 
 
 def safe_groq_chat(messages, temperature=0.2, max_tokens=300):
     try:
         return groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
+            model="llama-3.1-8b-instant", messages=messages,
+            temperature=temperature, max_tokens=max_tokens,
         )
     except RateLimitError:
-        print("[Groq] Rate limit hit. Waiting 8 seconds and retrying...")
         time.sleep(8)
         return groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
+            model="llama-3.1-8b-instant", messages=messages,
+            temperature=temperature, max_tokens=max_tokens,
         )
 
 
-def classify_question(state: PlannerState) -> dict:
-    # NOTE: route KEYS below (memory / personal_research / reflection / broad)
-    # are unchanged - route_decision, the graph edges, and valid_routes all
-    # depend on these exact strings. What changed is the *examples* under each
-    # route: they used to be personal-memory questions ("What is my favorite
-    # food?"), which actively mis-trains the classifier for an Insight Agent
-    # that's meant to analyze documents/reports rather than recall personal
-    # facts. The examples now match the kinds of questions the Insight Agent
-    # product is meant to answer.
+def classify_question(state):
     prompt = f"""
-You are the main planner for an Insight Agent.
+You are the main planner for an Insight Agent. Classify the question into exactly one route.
 
-Classify the user's question into exactly one route.
+memory: single stored fact lookup from documents.
+personal_research: multi-doc synthesis, comparison, or explanation.
+reflection: patterns, themes, changes over time.
+broad: general overview or summary.
+sql_insight: numeric aggregation from tabular data (top X by Y, sums, counts, breakdowns).
 
-Available routes:
+Question: {state["question"]}
 
-memory:
-Use this when the user asks for one specific stored fact from their synced
-documents or data - a direct lookup, not analysis.
-Examples:
-- What did the Q3 report say about churn?
-- When is my meeting with the design team?
-- What deadline did the project plan mention?
-- What did I write in my notes about the vendor contract?
-
-personal_research:
-Use this when the user asks a deeper question that needs multiple pieces of
-evidence, synthesis across documents, comparison, explanation, or uncertainty
-handling.
-Examples:
-- What assumptions show up repeatedly across these documents?
-- What evidence supports the conclusion in this report?
-- How do these projects connect to each other?
-- What does the evidence suggest about why this metric changed?
-- What should I investigate next based on what's here?
-
-reflection:
-Use this when the user asks about patterns, themes, changes over time,
-recurring decisions or assumptions, or wants a synthesized insight rather
-than a single fact.
-Examples:
-- What patterns do you notice across my documents?
-- What are the strongest insights from this corpus?
-- What changed over time in these reports?
-- What seems uncertain in what I have so far?
-- What decisions or assumptions keep coming up?
-
-broad:
-Use this when the user asks for a general overview, profile, or summary
-rather than a specific insight or fact.
-Examples:
-- What do you know based on everything synced so far?
-- Summarize what's in my documents.
-- Give me an overview of my synced data.
-- What's the big picture here?
-
-Question:
-{state["question"]}
-
-Respond with ONLY one word:
-memory, personal_research, reflection, or broad
+Reply ONLY one word: memory, personal_research, reflection, broad, or sql_insight
 """
-
-    response = safe_groq_chat(
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-        max_tokens=10,
-    )
-
-    route = response.choices[0].message.content.strip().lower()
-
-    valid_routes = ["memory", "personal_research", "reflection", "broad"]
-
-    if route not in valid_routes:
+    r = safe_groq_chat([{"role": "user", "content": prompt}], temperature=0, max_tokens=10)
+    route = r.choices[0].message.content.strip().lower()
+    if route not in ["memory", "personal_research", "reflection", "broad", "sql_insight"]:
         route = "memory"
-
     print(f"[Planner] routed to: {route}")
-
     return {"route": route}
 
 
-def route_decision(
-    state: PlannerState,
-) -> Literal["memory", "personal_research", "reflection", "broad"]:
+def route_decision(state) -> Literal["memory", "personal_research", "reflection", "broad", "sql_insight"]:
     return state["route"]
 
 
-def memory_node(state: PlannerState) -> dict:
+def memory_node(state):
     answer, memories, tier = chat.answer_question(
-        state["question"],
-        route_reflection=False,
+        state["question"], route_reflection=False,
         collection_name=state.get("collection_name"),
     )
-
     if NOT_FOUND_MESSAGE in answer:
         tier = "low"
-
-    return {
-        "answer": answer,
-        "confidence_tier": tier,
-    }
+    return {"answer": answer, "confidence_tier": tier, "chart": None}
 
 
-def personal_research_node(state: PlannerState) -> dict:
+def personal_research_node(state):
     try:
         answer, evidence, tier = run_personal_research(
-            state["question"],
-            collection_name=state.get("collection_name"),
+            state["question"], collection_name=state.get("collection_name"),
         )
     except RateLimitError:
-        print("[Personal Research] Groq rate limit hit. Waiting and retrying once...")
         time.sleep(8)
         answer, evidence, tier = run_personal_research(
-            state["question"],
-            collection_name=state.get("collection_name"),
+            state["question"], collection_name=state.get("collection_name"),
         )
-
     if NOT_FOUND_MESSAGE in answer:
         tier = "low"
-
-    return {
-        "answer": answer,
-        "confidence_tier": tier,
-    }
+    return {"answer": answer, "confidence_tier": tier, "chart": None}
 
 
-def reflection_node(state: PlannerState) -> dict:
-    collection_name = state.get("collection_name")
-
-    if collection_name and collection_name != chat.COLLECTION_NAME:
-        answer, tier = reflection.generate_reflection_for_collection(
-            collection_name,
-            state["question"],
-        )
+def reflection_node(state):
+    coll = state.get("collection_name")
+    if coll and coll != chat.COLLECTION_NAME:
+        answer, tier = reflection.generate_reflection_for_collection(coll, state["question"])
     else:
         answer = reflection.generate_reflection(state["question"])
         tier = "medium"
-
     if not answer or NOT_FOUND_MESSAGE in answer:
         tier = "low"
-
-    return {
-        "answer": answer,
-        "confidence_tier": tier,
-    }
+    return {"answer": answer, "confidence_tier": tier, "chart": None}
 
 
-def broad_node(state: PlannerState) -> dict:
+def broad_node(state):
     question = state["question"]
-
-    memories = chat.retrieve_memories(
-        question,
-        top_k=BROAD_TOP_K,
-        collection_name=state.get("collection_name"),
-    )
-
+    memories = chat.retrieve_memories(question, top_k=BROAD_TOP_K, collection_name=state.get("collection_name"))
     memories = annotate_memories(memories)
     memories = annotate_confidence(memories)
-
     if not memories:
-        return {
-            "answer": NOT_FOUND_MESSAGE,
-            "confidence_tier": "low",
-        }
+        return {"answer": NOT_FOUND_MESSAGE, "confidence_tier": "low", "chart": None}
 
     context = chat.build_context(memories)
-    question_for_llm = redact_sensitive_text(question)
-
+    q_for_llm = redact_sensitive_text(question)
     prompt = f"""
-You are an Insight Agent. The user asked a broad, general question. Synthesize
-an overview using the evidence snippets below.
+You are an Insight Agent. Synthesize a broad overview from the evidence.
+Be direct. Don't invent facts. Be honest if sparse.
 
-Rules:
-- Be clear and direct.
-- Do not make up facts beyond what's in the snippets.
-- If the snippets are too sparse to say much, be honest about that.
-- Keep the answer concise.
-
-Retrieved Evidence:
+Evidence:
 {context[:5000]}
 
-User Question:
-{question_for_llm}
+Question:
+{q_for_llm}
 """
-
-    response = safe_groq_chat(
-        messages=[
-            {
-                "role": "system",
-                "content": "You summarize a user's retrieved evidence into a broad overview.",
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-        temperature=0.3,
-        max_tokens=250,
+    r = safe_groq_chat(
+        [{"role": "system", "content": "Summarize retrieved evidence into a broad overview."},
+         {"role": "user", "content": prompt}],
+        temperature=0.3, max_tokens=250,
     )
-
     tier, _ = overall_response_tier(memories)
-
     if tier == "low":
         tier = "broad"
+    return {"answer": r.choices[0].message.content, "confidence_tier": tier, "chart": None}
 
-    return {
-        "answer": response.choices[0].message.content,
-        "confidence_tier": tier,
-    }
+
+def sql_insight_node(state):
+    import json
+    import pandas as pd
+    from supabase_client import get_client
+
+    resp = get_client().table("tabular_rows").select("data").eq(
+        "collection_name", state["collection_name"]
+    ).limit(2000).execute()
+
+    if not resp.data:
+        return {"answer": NOT_FOUND_MESSAGE, "chart": None, "confidence_tier": "low"}
+
+    df = pd.DataFrame([r["data"] for r in resp.data])
+    numeric = df.select_dtypes("number").columns.tolist()
+    categorical = [c for c in df.columns if c not in numeric]
+
+    plan_raw = safe_groq_chat([{"role": "user", "content":
+        f"Question: {state['question']}\nColumns: numeric={numeric}, categorical={categorical}\n"
+        f'Reply ONLY JSON: {{"group_by":"<col>","measure":"<col>","agg":"sum|avg|count","top":10}}'
+    }], temperature=0, max_tokens=120).choices[0].message.content
+
+    try:
+        plan = json.loads(plan_raw)
+        grouped = getattr(df.groupby(plan["group_by"])[plan["measure"]], plan["agg"])() \
+                    .sort_values(ascending=False).head(plan.get("top", 10))
+        chart = {
+            "type": "bar",
+            "title": f'{plan["agg"]}({plan["measure"]}) by {plan["group_by"]}',
+            "data": [{"label": str(k)[:15], "value": float(v)} for k, v in grouped.items()],
+        }
+        narrative = safe_groq_chat([{"role": "user", "content":
+            f"Summarize in 2 sentences. Do NOT invent numbers.\nQ: {state['question']}\nData: {chart['data']}"
+        }], max_tokens=150).choices[0].message.content
+        return {"answer": narrative, "chart": chart, "confidence_tier": "high"}
+    except Exception as e:
+        print(f"[sql_insight] failed: {e}")
+        return {"answer": "Couldn't build a chart from that question.", "chart": None, "confidence_tier": "low"}
 
 
 def build_planner_graph():
-    builder = StateGraph(PlannerState)
-
-    builder.add_node("classify", classify_question)
-    builder.add_node("memory", memory_node)
-    builder.add_node("personal_research", personal_research_node)
-    builder.add_node("reflection", reflection_node)
-    builder.add_node("broad", broad_node)
-
-    builder.add_edge(START, "classify")
-
-    builder.add_conditional_edges(
-        "classify",
-        route_decision,
-        {
-            "memory": "memory",
-            "personal_research": "personal_research",
-            "reflection": "reflection",
-            "broad": "broad",
-        },
-    )
-
-    builder.add_edge("memory", END)
-    builder.add_edge("personal_research", END)
-    builder.add_edge("reflection", END)
-    builder.add_edge("broad", END)
-
-    return builder.compile()
+    b = StateGraph(PlannerState)
+    b.add_node("classify", classify_question)
+    b.add_node("memory", memory_node)
+    b.add_node("personal_research", personal_research_node)
+    b.add_node("reflection", reflection_node)
+    b.add_node("broad", broad_node)
+    b.add_node("sql_insight", sql_insight_node)
+    b.add_edge(START, "classify")
+    b.add_conditional_edges("classify", route_decision, {
+        "memory": "memory",
+        "personal_research": "personal_research",
+        "reflection": "reflection",
+        "broad": "broad",
+        "sql_insight": "sql_insight",
+    })
+    for n in ["memory", "personal_research", "reflection", "broad", "sql_insight"]:
+        b.add_edge(n, END)
+    return b.compile()
 
 
 graph = build_planner_graph()
 
 
 def answer_with_planner(question, collection_name=None):
-    greeting_answer = greeting.respond(question)
-
-    if greeting_answer is not None:
-        return {
-            "route": "greeting",
-            "answer": greeting_answer,
-            "confidence_tier": "high",
-        }
+    g = greeting.respond(question)
+    if g is not None:
+        return {"route": "greeting", "answer": g, "confidence_tier": "high", "chart": None}
 
     try:
-        result = graph.invoke(
-            {
-                "question": question,
-                "route": "",
-                "answer": "",
-                "confidence_tier": "",
-                "collection_name": collection_name or chat.COLLECTION_NAME,
-            }
-        )
+        result = graph.invoke({
+            "question": question, "route": "", "answer": "",
+            "confidence_tier": "", "collection_name": collection_name or chat.COLLECTION_NAME,
+            "chart": None,
+        })
     except RateLimitError:
-        return {
-            "route": "error",
-            "answer": "Groq hit its free-tier rate limit. Please wait a few seconds and try again.",
-            "confidence_tier": "low",
-        }
+        return {"route": "error", "answer": "Rate limit. Try again in a few seconds.",
+                "confidence_tier": "low", "chart": None}
 
-    audit_log = build_safe_audit_log(
-        question=question,
-        route=result["route"],
-        tool_used=result["route"],
-        confidence_tier=result["confidence_tier"],
-        data_type_accessed=result["route"],
-    )
-
-    print("[Safe audit log]", audit_log)
-
+    print("[Safe audit log]", build_safe_audit_log(
+        question=question, route=result["route"], tool_used=result["route"],
+        confidence_tier=result["confidence_tier"], data_type_accessed=result["route"],
+    ))
     return result
-
-
-def main():
-    print("===== Insight Agent Planner =====")
-    print("Type 'quit' or 'exit' to leave.\n")
-
-    while True:
-        question = input("Ask a question: ").strip()
-
-        if question.lower() in ["quit", "exit"]:
-            print("Goodbye!")
-            break
-
-        if not question:
-            print("Please type a question.\n")
-            continue
-
-        result = answer_with_planner(question)
-
-        print(
-            f"\nInsight Agent [route: {result['route']} | confidence: {result['confidence_tier']}]:\n"
-        )
-        print(result["answer"])
-        print()
-
-
-if __name__ == "__main__":
-    main()

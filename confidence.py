@@ -1,7 +1,13 @@
 # confidence.py = blend retrieval distance + quality scores into confidence tiers
 
-HIGH_CONFIDENCE_THRESHOLD = 0.65
-MEDIUM_CONFIDENCE_THRESHOLD = 0.35
+# Narrowed the medium band (was 0.35-0.65) so high/medium/low each get a
+# fair shot at triggering, instead of nearly everything landing in the
+# middle. If you run print_confidence_breakdown() on a real batch of
+# memories and still see heavy clumping, that's a signal the underlying
+# score distribution (not just these thresholds) needs revisiting -
+# e.g. widening the quality_multiplier range in calculate_memory_confidence.
+HIGH_CONFIDENCE_THRESHOLD = 0.55
+MEDIUM_CONFIDENCE_THRESHOLD = 0.40
 
 
 def distance_to_similarity(distance):
@@ -35,8 +41,22 @@ def calculate_memory_confidence(memory):
 
 def get_confidence_tier(confidence_score):
     """
-    Maps 0-1 confidence score to behavior tier.
+    Maps a 0-1 confidence score to a behavior tier.
+
+    Always returns the string "high", "medium", or "low" - never a raw
+    number. Defensive against None, NaN, strings, or out-of-range values
+    so a malformed score upstream can never leak past this function.
     """
+    try:
+        confidence_score = float(confidence_score)
+    except (TypeError, ValueError):
+        return "low"
+
+    if confidence_score != confidence_score:  # NaN check
+        return "low"
+
+    confidence_score = max(0.0, min(1.0, confidence_score))
+
     if confidence_score >= HIGH_CONFIDENCE_THRESHOLD:
         return "high"
 
@@ -71,9 +91,11 @@ def overall_response_tier(memories):
         key=lambda m: m.get("confidence_score", 0)
     )
 
+    score = best_memory.get("confidence_score", 0.0)
+
     return (
-        best_memory.get("confidence_tier", "low"),
-        best_memory.get("confidence_score", 0.0),
+        get_confidence_tier(score),
+        score,
     )
 
 
