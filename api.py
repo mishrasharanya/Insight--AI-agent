@@ -178,7 +178,7 @@ def google_callback(code: str, request: Request):
         # Don't block login if this write fails - just log it.
         print(f"[auth] failed to upsert user record for {email}: {error}")
 
-    response = RedirectResponse(url=FRONTEND_URL)
+    response = RedirectResponse(url=f"{FRONTEND_URL}/app/chat")
 
     response.set_cookie(
         SESSION_COOKIE,
