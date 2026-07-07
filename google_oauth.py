@@ -5,7 +5,7 @@
 # contents to index them locally.
 
 import os
-
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 import requests as http_requests
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
