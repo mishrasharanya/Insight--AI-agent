@@ -111,11 +111,16 @@ def google_callback(code: str, request: Request):
         payload = serializer.loads(verifier_cookie, max_age=OAUTH_VERIFIER_MAX_AGE)
         code_verifier = payload.get("code_verifier")
     except (BadSignature, TypeError):
-        raise HTTPException(status_code=400, detail="Login session expired.")
+        return RedirectResponse(url=f"{FRONTEND_URL}/?error=session_expired")
 
-    credentials = google_oauth.exchange_code(code, code_verifier)
-    user_info = google_oauth.get_user_info(credentials)
+    try:
+        credentials = google_oauth.exchange_code(code, code_verifier)
+        user_info = google_oauth.get_user_info(credentials)
+    except Exception as e:
+        print(f"[auth] OAuth exchange failed: {e}")
+        return RedirectResponse(url=f"{FRONTEND_URL}/?error=oauth_failed")
 
+    # ↓ continue with the rest of your existing code from here ↓
     user_id = user_info["sub"]
     email = user_info.get("email", "unknown")
 
@@ -135,7 +140,6 @@ def google_callback(code: str, request: Request):
     except Exception as error:
         print(f"[auth] failed to upsert user record for {email}: {error}")
 
-    # Bearer token in URL instead of cookie (works across domains)
     token = create_token(user_id)
     response = RedirectResponse(url=f"{FRONTEND_URL}/app/chat?token={token}")
     response.delete_cookie(OAUTH_VERIFIER_COOKIE, httponly=True, secure=True, samesite="none")
