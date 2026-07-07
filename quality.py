@@ -1,7 +1,7 @@
 # quality.py = score retrieved memories for freshness, completeness, and conflicts
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from groq import Groq
@@ -16,18 +16,21 @@ FRESHNESS_HALF_LIFE_DAYS = 180
 MIN_WORDS_FOR_FULL_COMPLETENESS = 15
 
 
-def calculate_freshness_score(date_str):
-    """
-    1.0 = new, decays toward 0 as content ages.
-    Uses effective_date when available.
-    """
-    try:
-        date_value = datetime.fromisoformat(date_str)
-    except (ValueError, TypeError):
+def calculate_freshness_score(date_value):
+    if date_value is None:
         return 0.5
 
-    age_days = (datetime.now() - date_value).days
-    age_days = max(age_days, 0)
+    if isinstance(date_value, str):
+        try:
+            date_value = datetime.fromisoformat(date_value.replace("Z", "+00:00"))
+        except ValueError:
+            return 0.5
+
+    if date_value.tzinfo is None:
+        date_value = date_value.replace(tzinfo=timezone.utc)
+
+    now = datetime.now(timezone.utc)
+    age_days = (now - date_value).days
 
     score = 0.5 ** (age_days / FRESHNESS_HALF_LIFE_DAYS)
     return round(score, 3)
