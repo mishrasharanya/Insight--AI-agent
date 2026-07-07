@@ -6,7 +6,6 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   const checkAuth = useCallback(async () => {
-    // 1) If Google redirected us back with ?token=... store it and clean URL
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get("token");
     if (urlToken) {
@@ -16,14 +15,9 @@ export function useAuth() {
       window.history.replaceState({}, "", clean);
     }
 
-    // 2) Ask backend who we are
     try {
       const { data } = await api.get("/auth/me");
-      if (data.logged_in) {
-        setUser({ email: data.email });
-      } else {
-        setUser(null);
-      }
+      setUser(data.logged_in ? { email: data.email } : null);
     } catch {
       setUser(null);
     } finally {
@@ -31,23 +25,24 @@ export function useAuth() {
     }
   }, []);
 
-  useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
+  useEffect(() => { checkAuth(); }, [checkAuth]);
 
   const login = () => {
-    // Send user to backend's Google login endpoint
+    window.location.href = `${INSIGHT_API_URL}/auth/google/login`;
+  };
+
+  // Same as login but semantically distinct - used when adding more permissions
+  const reconnect = () => {
     window.location.href = `${INSIGHT_API_URL}/auth/google/login`;
   };
 
   const logout = async () => {
     localStorage.removeItem("insight_token");
-    try {
-      await api.post("/auth/logout");
-    } catch {}
+    localStorage.removeItem("insight_chat");
+    try { await api.post("/auth/logout"); } catch {}
     setUser(null);
     window.location.href = "/";
   };
 
-  return { user, loading, login, logout };
+  return { user, loading, login, logout, reconnect };
 }
