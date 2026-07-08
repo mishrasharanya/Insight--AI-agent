@@ -39,7 +39,6 @@ def get_authorization_url():
     )
     return auth_url, state, flow.code_verifier
 
-
 def exchange_code(code, code_verifier):
     flow = Flow.from_client_config(client_config=_client_config(), scopes=SCOPES)
     flow.redirect_uri = GOOGLE_REDIRECT_URI

@@ -31,11 +31,6 @@ export function useAuth() {
     window.location.href = `${INSIGHT_API_URL}/auth/google/login`;
   };
 
-  // Same as login but semantically distinct - used when adding more permissions
-  const reconnect = () => {
-    window.location.href = `${INSIGHT_API_URL}/auth/google/login`;
-  };
-
   const logout = async () => {
     localStorage.removeItem("insight_token");
     localStorage.removeItem("insight_chat");
@@ -44,5 +39,5 @@ export function useAuth() {
     window.location.href = "/";
   };
 
-  return { user, loading, login, logout, reconnect };
+  return { user, loading, login, logout };
 }

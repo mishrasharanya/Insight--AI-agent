@@ -277,17 +277,3 @@ def privacy_inventory(user_id: str = Depends(get_current_user_id_optional)):
 def purge_privacy_data(user_id: str = Depends(get_current_user_id_optional)):
     collection_name = google_sync.collection_name_for(user_id) if user_id else None
     return privacy.purge_all_local_data(confirm=True, collection_name=collection_name)
-
-@app.get("/auth/scopes")
-def auth_scopes(user_id: str = Depends(get_current_user_id_optional)):
-    if not user_id:
-        return {"logged_in": False, "has_drive": False, "has_calendar": False}
-    user = auth_store.get_user(user_id)
-    if not user:
-        return {"logged_in": False, "has_drive": False, "has_calendar": False}
-    granted = set(google_oauth.get_granted_scopes(user["refresh_token"]))
-    return {
-        "logged_in": True,
-        "has_drive": "https://www.googleapis.com/auth/drive.file" in granted,
-        "has_calendar": "https://www.googleapis.com/auth/calendar.readonly" in granted,
-    }
