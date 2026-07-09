@@ -40,7 +40,7 @@ export default function Layout() {
 
         <div className="p-4 border-t border-[#1a1a1a]/10">
           <p className="font-mono text-[10px] uppercase tracking-widest text-[#1a1a1a]/50 mb-1">
-            Signed in
+            {user?.isGuest ? "Trying locally" : "Signed in"}
           </p>
           <p className="text-sm truncate mb-3" data-testid="sidebar-user-email">
             {user?.email || user?.name || "Account"}

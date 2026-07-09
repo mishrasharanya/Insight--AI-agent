@@ -1,11 +1,16 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowUpRight, FileSearch, Sparkles } from "lucide-react";
+import { ArrowUpRight, FileSearch, FileUp, Sparkles } from "lucide-react";
 import { useAuth } from "../lib/useAuth";
 
 export default function Login() {
-  const { user, loading, login } = useAuth();
+  const { user, loading, login, startTrial } = useAuth();
   const navigate = useNavigate();
+
+  const tryBeforeDrive = () => {
+    startTrial();
+    navigate("/app/chat");
+  };
 
   useEffect(() => {
     if (!loading && user) navigate("/app/chat", { replace: true });
@@ -21,11 +26,11 @@ export default function Login() {
             <span className="font-mono text-xs uppercase tracking-[0.2em]">InsightAI</span>
           </div>
           <button
-            onClick={login}
+            onClick={() => login()}
             data-testid="login-header-signin"
             className="font-mono text-xs uppercase tracking-[0.15em] hover:text-[#b8541f] transition-colors"
           >
-            Sign in ↗
+            Connect Drive ↗
           </button>
         </div>
       </header>
@@ -49,20 +54,21 @@ export default function Login() {
 
           <div className="mt-10 flex justify-center gap-3">
             <button
-              onClick={login}
+              onClick={() => login()}
               data-testid="login-google-button"
               className="group inline-flex items-center gap-2 px-5 py-3 text-sm font-medium text-[#f5f1e8] bg-[#1a1a1a] hover:bg-[#b8541f] transition-colors"
             >
-              Continue with Google
+              Connect Google Drive
               <ArrowUpRight className="w-4 h-4 group-hover:rotate-45 transition-transform" />
             </button>
-            <a
-              href="#how"
-              data-testid="login-how-it-works"
-              className="inline-flex items-center px-5 py-3 text-sm font-medium border border-[#1a1a1a]/20 hover:border-[#1a1a1a] transition-colors"
+            <button
+              onClick={tryBeforeDrive}
+              data-testid="login-try-button"
+              className="inline-flex items-center gap-2 px-5 py-3 text-sm font-medium border border-[#1a1a1a]/20 hover:border-[#1a1a1a] transition-colors"
             >
-              How it works
-            </a>
+              Want to try it before connecting to Drive?
+              <FileUp className="w-4 h-4" strokeWidth={1.5} />
+            </button>
           </div>
           <p className="font-mono text-[10px] uppercase tracking-widest text-[#1a1a1a]/50 mt-5">
             Read-only. Never trains a public model.
@@ -122,15 +128,15 @@ export default function Login() {
             Ready to <em className="text-[#b8541f]">talk to your data?</em>
           </h2>
           <p className="mt-4 text-base text-[#1a1a1a]/70">
-            One click. Google login. You'll be chatting in under a minute.
+            Upload a local file first, then connect Drive when you are ready.
           </p>
           <button
-            onClick={login}
+            onClick={tryBeforeDrive}
             data-testid="login-cta-button"
             className="group mt-8 inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-[#f5f1e8] bg-[#1a1a1a] hover:bg-[#b8541f] transition-colors"
           >
-            Continue with Google
-            <ArrowUpRight className="w-4 h-4 group-hover:rotate-45 transition-transform" />
+            Try with local files
+            <FileUp className="w-4 h-4" strokeWidth={1.5} />
           </button>
         </section>
       </main>
@@ -155,15 +161,7 @@ const EXAMPLES = [
 ];
 
 const STEPS = [
-  { title: "Connect", icon: <GoogleG />, text: "Sign in once with Google. Read-only scopes for Drive + Calendar." },
-  { title: "Pick data", icon: <FileSearch className="w-5 h-5" strokeWidth={1.5} />, text: "Choose which files matter and sync your Calendar. Indexed privately." },
+  { title: "Try", icon: <FileUp className="w-5 h-5" strokeWidth={1.5} />, text: "Open chat and add a local file before connecting Drive." },
+  { title: "Pick data", icon: <FileSearch className="w-5 h-5" strokeWidth={1.5} />, text: "Upload files directly or choose Drive files later. Indexed privately." },
   { title: "Ask", icon: <Sparkles className="w-5 h-5" strokeWidth={1.5} />, text: "Chat in plain English. Every answer cites the file or meeting it came from." },
 ];
-
-function GoogleG() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-      <path fill="#1a1a1a" d="M21.35 11.1H12v2.9h5.35c-.23 1.4-1.62 4.1-5.35 4.1-3.22 0-5.85-2.67-5.85-5.95S8.78 6.2 12 6.2c1.83 0 3.06.78 3.76 1.45l2.57-2.47C16.86 3.68 14.68 2.8 12 2.8 6.94 2.8 2.85 6.89 2.85 12s4.09 9.2 9.15 9.2c5.28 0 8.78-3.71 8.78-8.94 0-.6-.06-1.06-.16-1.16z"/>
-    </svg>
-  );
-}

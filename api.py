@@ -1,7 +1,10 @@
 import os
+import shutil
+import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from itsdangerous import BadSignature, URLSafeTimedSerializer
@@ -84,6 +87,40 @@ class DrivePickedFile(BaseModel):
 
 class DriveSyncRequest(BaseModel):
     files: list[DrivePickedFile]
+
+
+def ingest_single_file(file_path: Path, collection_name: str):
+    text = ingest.read_file(file_path)
+    if not text.strip():
+        return {"filename": file_path.name, "chunks_added": 0, "structured_rows_added": 0}
+
+    client = get_client()
+    chunks = ingest.chunk_text(text)
+    file_hash = ingest.get_file_hash(file_path)
+    effective_date = ingest.get_effective_date(file_path)
+    chunks_added = ingest.upsert_chunks(
+        client,
+        collection_name,
+        file_path,
+        chunks,
+        file_hash,
+        effective_date,
+    )
+
+    structured_rows_added = 0
+    if file_path.suffix.lower() in ingest.STRUCTURED_EXTENSIONS:
+        structured_rows_added = ingest.upsert_structured_rows(
+            client,
+            collection_name,
+            file_path,
+            effective_date,
+        )
+
+    return {
+        "filename": file_path.name,
+        "chunks_added": chunks_added,
+        "structured_rows_added": structured_rows_added,
+    }
 
 
 @app.get("/health")
@@ -194,6 +231,70 @@ def sync_drive_endpoint(request: DriveSyncRequest, user_id: str = Depends(get_cu
     credentials = google_oauth.credentials_from_refresh_token(user["refresh_token"])
     picked_files = [f.dict() for f in request.files]
     return google_sync.sync_drive_files(user_id, credentials, picked_files)
+
+
+@app.post("/sync/files")
+def sync_uploaded_files(files: list[UploadFile] = File(...), user_id: str = Depends(get_current_user_id_optional)):
+    if not files:
+        raise HTTPException(status_code=400, detail="Upload at least one file.")
+
+    collection_name = google_sync.collection_name_for(user_id) if user_id else ingest.COLLECTION_NAME
+    uploaded = []
+    files_synced = 0
+    files_skipped = 0
+    total_chunks = 0
+    total_structured_rows = 0
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_root = Path(temp_dir)
+
+        for upload in files:
+            filename = Path(upload.filename or "untitled").name
+            suffix = Path(filename).suffix.lower()
+
+            if suffix not in ingest.SUPPORTED_EXTENSIONS:
+                files_skipped += 1
+                uploaded.append({
+                    "filename": filename,
+                    "chunks_added": 0,
+                    "structured_rows_added": 0,
+                    "error": "Unsupported file type.",
+                })
+                continue
+
+            file_path = temp_root / filename
+
+            try:
+                with file_path.open("wb") as output:
+                    shutil.copyfileobj(upload.file, output)
+
+                result = ingest_single_file(file_path, collection_name)
+                uploaded.append(result)
+
+                if result["chunks_added"]:
+                    files_synced += 1
+                    total_chunks += result["chunks_added"]
+                    total_structured_rows += result["structured_rows_added"]
+                else:
+                    files_skipped += 1
+            except Exception as error:
+                files_skipped += 1
+                uploaded.append({
+                    "filename": filename,
+                    "chunks_added": 0,
+                    "structured_rows_added": 0,
+                    "error": str(error),
+                })
+            finally:
+                upload.file.close()
+
+    return {
+        "files_synced": files_synced,
+        "files_skipped": files_skipped,
+        "chunks_added": total_chunks,
+        "structured_rows_added": total_structured_rows,
+        "files": uploaded,
+    }
 
 
 @app.post("/chat")

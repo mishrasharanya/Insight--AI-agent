@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Sparkles, Trash2 } from "lucide-react";
+import { Plus, Send, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -18,7 +18,9 @@ export default function Chat() {
   });
   const [question, setQuestion] = useState("");
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const endRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Persist chat to localStorage on every change
   useEffect(() => {
@@ -33,6 +35,37 @@ export default function Chat() {
     setMessages([]);
     localStorage.removeItem(CHAT_STORAGE_KEY);
     toast.success("Chat cleared");
+  };
+
+  const uploadFiles = async (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (files.length === 0) return;
+
+    const formData = new FormData();
+    files.forEach((file) => formData.append("files", file));
+
+    setUploading(true);
+    try {
+      const { data } = await api.post("/sync/files", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const summary = (data.files || [])
+        .map((file) => `${file.filename}: ${file.chunks_added} chunk${file.chunks_added === 1 ? "" : "s"}`)
+        .join("\n");
+      toast.success(`Added ${data.files_synced} file(s), ${data.chunks_added} chunks`);
+      setMessages((m) => [...m, {
+        role: "assistant",
+        text: `Files added. You can ask about them now.\n\n${summary}`,
+      }]);
+    } catch (err) {
+      const detail = err?.response?.status === 404
+        ? "Local file upload route not found. Restart the FastAPI backend on port 8000 or deploy the latest API."
+        : err?.response?.data?.detail || "File upload failed";
+      toast.error(detail);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const send = async (e) => {
@@ -67,10 +100,28 @@ export default function Chat() {
         <div>
           <h1 className="font-heading text-3xl" data-testid="chat-title">Ask InsightAI</h1>
           <p className="text-sm text-[#1a1a1a]/70 mt-1">
-            Chat with an agent that reads your synced Drive files and Calendar.
+            Chat with an agent that reads the files you add.
           </p>
         </div>
-        {messages.length > 0 && (
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            data-testid="chat-add-files-button"
+            className="w-10 h-10 border border-[#1a1a1a]/20 hover:border-[#1a1a1a] disabled:opacity-40 flex items-center justify-center transition-colors"
+            title="Add local files"
+          >
+            <Plus className="w-5 h-5" strokeWidth={1.5} />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={uploadFiles}
+            className="hidden"
+            accept=".txt,.md,.csv,.pdf,.docx,.pptx,.xlsx,.json"
+          />
+          {messages.length > 0 && (
           <button
             onClick={clearChat}
             data-testid="chat-clear-button"
@@ -79,7 +130,8 @@ export default function Chat() {
             <Trash2 className="w-3.5 h-3.5" />
             Clear chat
           </button>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-8 py-8" data-testid="chat-messages">
@@ -92,6 +144,14 @@ export default function Chat() {
                 <Sparkles className="w-4 h-4" />
               </div>
               <div className="pt-1.5 text-sm text-[#1a1a1a]/60 animate-pulse">Thinking…</div>
+            </div>
+          )}
+          {uploading && (
+            <div className="flex gap-4" data-testid="chat-uploading">
+              <div className="w-8 h-8 bg-[#1a1a1a] text-[#f5f1e8] flex items-center justify-center shrink-0">
+                <Plus className="w-4 h-4" />
+              </div>
+              <div className="pt-1.5 text-sm text-[#1a1a1a]/60 animate-pulse">Adding files…</div>
             </div>
           )}
           <div ref={endRef} />
