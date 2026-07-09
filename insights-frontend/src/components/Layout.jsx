@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { MessageSquare, Table2, RefreshCw, ShieldCheck, LogOut } from "lucide-react";
+import { LogIn, LogOut, MessageSquare, RefreshCw, ShieldCheck, Table2 } from "lucide-react";
 import { useAuth } from "../lib/useAuth";
 
 const NAV = [
@@ -10,7 +10,7 @@ const NAV = [
 ];
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, login, logout } = useAuth();
 
   return (
     <div className="min-h-screen bg-[#f5f1e8] text-[#1a1a1a]">
@@ -40,18 +40,22 @@ export default function Layout() {
 
         <div className="p-4 border-t border-[#1a1a1a]/10">
           <p className="font-mono text-[10px] uppercase tracking-widest text-[#1a1a1a]/50 mb-1">
-            {user?.isGuest ? "Trying locally" : "Signed in"}
+            {user?.isGuest ? "You are in" : "Signed in"}
           </p>
           <p className="text-sm truncate mb-3" data-testid="sidebar-user-email">
             {user?.email || user?.name || "Account"}
           </p>
           <button
-            onClick={logout}
-            data-testid="sidebar-logout-button"
+            onClick={user?.isGuest ? () => login("/app/chat") : logout}
+            data-testid={user?.isGuest ? "sidebar-signin-button" : "sidebar-logout-button"}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[#1a1a1a]/70 hover:bg-[#1a1a1a]/5 transition-colors"
           >
-            <LogOut className="w-4 h-4" strokeWidth={1.5} />
-            Log out
+            {user?.isGuest ? (
+              <LogIn className="w-4 h-4" strokeWidth={1.5} />
+            ) : (
+              <LogOut className="w-4 h-4" strokeWidth={1.5} />
+            )}
+            {user?.isGuest ? "Sign in with Google" : "Log out"}
           </button>
         </div>
       </aside>

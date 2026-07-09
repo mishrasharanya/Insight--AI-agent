@@ -4,7 +4,7 @@ import api, { INSIGHT_API_URL } from "./api";
 export function useAuth() {
   const getTrialUser = () => (
     localStorage.getItem("insight_try_mode") === "true"
-      ? { email: "Local trial", isGuest: true }
+      ? { email: "Experimenting stage", isGuest: true }
       : null
   );
   const [user, setUser] = useState(() => getTrialUser());
@@ -44,7 +44,7 @@ export function useAuth() {
   const startTrial = () => {
     localStorage.removeItem("insight_token");
     localStorage.setItem("insight_try_mode", "true");
-    setUser({ email: "Local trial", isGuest: true });
+    setUser({ email: "Experimenting stage", isGuest: true });
   };
 
   const logout = async () => {

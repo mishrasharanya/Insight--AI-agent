@@ -14,6 +14,7 @@ from confidence import annotate_confidence, overall_response_tier
 import chat
 import reflection
 import greeting
+import privacy
 
 from research.personal_research_agent import run_personal_research
 
@@ -24,6 +25,19 @@ if GROQ_API_KEY is None:
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 BROAD_TOP_K = 5
+INVENTORY_KEYWORDS = (
+    "what file",
+    "which file",
+    "files did i",
+    "file did i",
+    "synced file",
+    "sync file",
+    "uploaded file",
+    "upload file",
+    "added file",
+    "most chunks",
+    "mostly",
+)
 
 
 class PlannerState(TypedDict):
@@ -206,15 +220,73 @@ def build_planner_graph():
 graph = build_planner_graph()
 
 
+def should_answer_inventory(question):
+    q = question.lower()
+    return any(keyword in q for keyword in INVENTORY_KEYWORDS) and any(
+        word in q for word in ("file", "files", "sync", "synced", "upload", "uploaded", "chunks")
+    )
+
+
+def answer_inventory_question(question, collection_name=None):
+    inventory = privacy.get_data_inventory(collection_name=collection_name)
+    sources = inventory.get("sources", [])
+
+    if inventory.get("error"):
+        return {
+            "route": "inventory",
+            "answer": inventory["error"],
+            "confidence_tier": "low",
+            "chart": None,
+        }
+
+    if not sources:
+        return {
+            "route": "inventory",
+            "answer": "You have not added any files yet. Use the + button in Chat or Add files on Sync to upload a local file.",
+            "confidence_tier": "high",
+            "chart": None,
+        }
+
+    ordered = sorted(
+        sources,
+        key=lambda item: (item.get("chunk_count") or 0, item.get("last_ingested") or ""),
+        reverse=True,
+    )
+    top = ordered[0]
+    lines = [
+        f"You have indexed {len(ordered)} file(s) with {inventory.get('total_chunks', 0)} total chunk(s).",
+        f"The file with the most chunks is **{top['filename']}** with {top.get('chunk_count', 0)} chunk(s).",
+        "",
+        "Indexed files:",
+    ]
+
+    for source in ordered[:10]:
+        lines.append(f"- **{source['filename']}**: {source.get('chunk_count', 0)} chunk(s)")
+
+    if len(ordered) > 10:
+        lines.append(f"- ...and {len(ordered) - 10} more")
+
+    return {
+        "route": "inventory",
+        "answer": "\n".join(lines),
+        "confidence_tier": "high",
+        "chart": None,
+    }
+
+
 def answer_with_planner(question, collection_name=None):
     g = greeting.respond(question)
     if g is not None:
         return {"route": "greeting", "answer": g, "confidence_tier": "high", "chart": None}
 
+    active_collection = collection_name or chat.COLLECTION_NAME
+    if should_answer_inventory(question):
+        return answer_inventory_question(question, collection_name=active_collection)
+
     try:
         result = graph.invoke({
             "question": question, "route": "", "answer": "",
-            "confidence_tier": "", "collection_name": collection_name or chat.COLLECTION_NAME,
+            "confidence_tier": "", "collection_name": active_collection,
             "chart": None,
         })
     except RateLimitError:

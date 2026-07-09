@@ -26,6 +26,7 @@ function App() {
   return (
     <div className="App">
       <Toaster position="top-right" richColors closeButton />
+      <div className="app-watermark" aria-hidden="true">Made by Sharanya Mishra</div>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Login />} />
