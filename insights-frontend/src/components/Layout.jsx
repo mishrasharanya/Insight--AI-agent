@@ -57,7 +57,7 @@ export default function Layout() {
               className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[#1a1a1a]/70 hover:bg-[#1a1a1a]/5 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
-              Back to landing
+              Back
             </button>
           )}
           <button
