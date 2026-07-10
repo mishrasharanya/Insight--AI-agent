@@ -47,6 +47,11 @@ export function useAuth() {
     setUser({ email: "Experimenting stage", isGuest: true });
   };
 
+  const leaveTrial = () => {
+    localStorage.removeItem("insight_try_mode");
+    setUser(null);
+  };
+
   const logout = async () => {
     localStorage.removeItem("insight_token");
     localStorage.removeItem("insight_chat");
@@ -56,5 +61,5 @@ export function useAuth() {
     window.location.href = "/";
   };
 
-  return { user, loading, login, logout, startTrial };
+  return { user, loading, login, logout, startTrial, leaveTrial };
 }

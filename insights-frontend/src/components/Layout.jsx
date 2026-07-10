@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LogIn, LogOut, MessageSquare, RefreshCw, ShieldCheck, Table2 } from "lucide-react";
+import { ArrowLeft, LogIn, LogOut, MessageSquare, RefreshCw, ShieldCheck, Table2 } from "lucide-react";
 import { useAuth } from "../lib/useAuth";
 
 const NAV = [
@@ -10,7 +10,12 @@ const NAV = [
 ];
 
 export default function Layout() {
-  const { user, login, logout } = useAuth();
+  const { user, login, logout, leaveTrial } = useAuth();
+
+  const backToLanding = () => {
+    leaveTrial();
+    window.location.href = "/";
+  };
 
   return (
     <div className="min-h-screen bg-[#f5f1e8] text-[#1a1a1a]">
@@ -45,6 +50,16 @@ export default function Layout() {
           <p className="text-sm truncate mb-3" data-testid="sidebar-user-email">
             {user?.email || user?.name || "Account"}
           </p>
+          {user?.isGuest && (
+            <button
+              onClick={backToLanding}
+              data-testid="sidebar-back-landing-button"
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[#1a1a1a]/70 hover:bg-[#1a1a1a]/5 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
+              Back to landing
+            </button>
+          )}
           <button
             onClick={user?.isGuest ? () => login("/app/chat") : logout}
             data-testid={user?.isGuest ? "sidebar-signin-button" : "sidebar-logout-button"}

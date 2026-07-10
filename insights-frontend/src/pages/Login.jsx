@@ -13,7 +13,7 @@ export default function Login() {
   };
 
   useEffect(() => {
-    if (!loading && user) navigate("/app/chat", { replace: true });
+    if (!loading && user && !user.isGuest) navigate("/app/chat", { replace: true });
   }, [user, loading, navigate]);
 
   return (
