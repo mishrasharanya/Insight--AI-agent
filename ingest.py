@@ -92,14 +92,35 @@ def read_pptx_file(file_path):
     presentation = Presentation(file_path)
     slides = []
 
+    def collect_shape_text(shape):
+        parts = []
+
+        if hasattr(shape, "text") and shape.text:
+            text = shape.text.strip()
+            if text:
+                parts.append(text)
+
+        if hasattr(shape, "table"):
+            for row in shape.table.rows:
+                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                if cells:
+                    parts.append(" | ".join(cells))
+
+        if hasattr(shape, "shapes"):
+            for child_shape in shape.shapes:
+                parts.extend(collect_shape_text(child_shape))
+
+        return parts
+
     for slide_num, slide in enumerate(presentation.slides, start=1):
         parts = []
 
         for shape in slide.shapes:
-            if hasattr(shape, "text"):
-                text = shape.text.strip()
-                if text:
-                    parts.append(text)
+            parts.extend(collect_shape_text(shape))
+
+        if slide.has_notes_slide:
+            for shape in slide.notes_slide.shapes:
+                parts.extend(collect_shape_text(shape))
 
         if parts:
             slides.append(f"[Slide {slide_num}]\n" + "\n".join(parts))

@@ -92,7 +92,12 @@ class DriveSyncRequest(BaseModel):
 def ingest_single_file(file_path: Path, collection_name: str):
     text = ingest.read_file(file_path)
     if not text.strip():
-        return {"filename": file_path.name, "chunks_added": 0, "structured_rows_added": 0}
+        return {
+            "filename": file_path.name,
+            "chunks_added": 0,
+            "structured_rows_added": 0,
+            "error": "No readable text found. If this file is image-only, export/selectable text is needed before it can be chunked.",
+        }
 
     client = get_client()
     chunks = ingest.chunk_text(text)

@@ -90,7 +90,11 @@ export default function Sync() {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setUploadResult(data);
-      toast.success(`Uploaded ${data.files_synced} file(s), ${data.chunks_added} chunks`);
+      if (data.files_synced > 0) {
+        toast.success(`Uploaded ${data.files_synced} file(s), ${data.chunks_added} chunks`);
+      } else {
+        toast.error((data.files || [])[0]?.error || "No chunks were created");
+      }
       setLocalFiles([]);
     } catch (err) {
       const detail = err?.response?.status === 404
@@ -231,11 +235,14 @@ export default function Sync() {
           {uploadResult?.files?.length > 0 && (
             <ul className="mt-4 divide-y divide-[#1a1a1a]/10 border border-[#1a1a1a]/10" data-testid="sync-local-result">
               {uploadResult.files.map((file, index) => (
-                <li key={`${file.filename}-${index}`} className="grid grid-cols-[1fr_80px] gap-3 px-4 py-2">
+                <li key={`${file.filename}-${index}`} className="grid grid-cols-[1fr_100px] gap-3 px-4 py-2">
                   <span className="text-sm truncate">{file.filename}</span>
-                  <span className="font-mono text-xs text-[#b8541f] text-right">
-                    {file.chunks_added} chunks
+                  <span className={`font-mono text-xs text-right ${file.error ? "text-red-600" : "text-[#b8541f]"}`}>
+                    {file.error ? "skipped" : `${file.chunks_added} chunks`}
                   </span>
+                  {file.error && (
+                    <span className="col-span-2 text-xs text-red-600 leading-relaxed">{file.error}</span>
+                  )}
                 </li>
               ))}
             </ul>

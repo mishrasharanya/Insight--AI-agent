@@ -51,12 +51,21 @@ export default function Chat() {
         headers: { "Content-Type": "multipart/form-data" },
       });
       const summary = (data.files || [])
-        .map((file) => `${file.filename}: ${file.chunks_added} chunk${file.chunks_added === 1 ? "" : "s"}`)
+        .map((file) => {
+          const chunks = `${file.chunks_added} chunk${file.chunks_added === 1 ? "" : "s"}`;
+          return file.error ? `${file.filename}: ${chunks} (${file.error})` : `${file.filename}: ${chunks}`;
+        })
         .join("\n");
-      toast.success(`Added ${data.files_synced} file(s), ${data.chunks_added} chunks`);
+      if (data.files_synced > 0) {
+        toast.success(`Added ${data.files_synced} file(s), ${data.chunks_added} chunks`);
+      } else {
+        toast.error((data.files || [])[0]?.error || "No chunks were created");
+      }
       setMessages((m) => [...m, {
         role: "assistant",
-        text: `Files added. You can ask about them now.\n\n${summary}`,
+        text: data.files_synced > 0
+          ? `Files added. You can ask about them now.\n\n${summary}`
+          : `No chunks were created.\n\n${summary}`,
       }]);
     } catch (err) {
       const detail = err?.response?.status === 404

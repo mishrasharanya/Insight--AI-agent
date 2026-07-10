@@ -60,16 +60,17 @@ def is_reflection_question(question):
 def build_context(memories):
     context_parts = []
 
-    for i, memory in enumerate(memories, start=1):
+    for memory in memories:
         quality = memory.get("quality", {})
         conflict_note = " (CONFLICTS WITH OTHER EVIDENCE)" if quality.get("has_conflict") else ""
+        filename = memory["metadata"].get("filename", "unknown")
 
         context_parts.append(
-            f"Evidence {i} [quality score: {quality.get('overall', 'unknown')}, "
+            f"File: {filename} [quality score: {quality.get('overall', 'unknown')}, "
             f"confidence: {memory.get('confidence_score', 'unknown')} "
             f"({memory.get('confidence_tier', 'unknown')})]{conflict_note}:\n"
             f"Text: {memory['text']}\n"
-            f"Source: {memory['metadata']['filename']}\n"
+            f"Source filename: {filename}\n"
             f"Date: {memory['metadata'].get('date_modified', 'unknown')}"
         )
 
@@ -139,6 +140,7 @@ Rules:
 - Weigh evidence by its quality and confidence scores - trust higher-scored evidence more.
 - If two pieces of evidence conflict, mention the conflict rather than picking one silently.
 - Where relevant, note what the evidence supports vs. what you are inferring.
+- When citing support, name the source filename. Do not cite sources as "Evidence 1", "Evidence 2", etc.
 - Keep the answer concise.
 
 Retrieved Evidence:

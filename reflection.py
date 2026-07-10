@@ -537,13 +537,13 @@ def build_structured_summary(classified):
 def build_evidence_snippets(chunks):
     snippets = []
 
-    for i, chunk in enumerate(chunks[:MAX_REFLECTION_CHUNKS], start=1):
+    for chunk in chunks[:MAX_REFLECTION_CHUNKS]:
         text = " ".join(chunk["text"].split())
         if len(text) > 450:
             text = text[:450] + "..."
 
         snippets.append(
-            f"Evidence {i} from {chunk['filename']}:\n{text}"
+            f"File: {chunk['filename']}\n{text}"
         )
 
     return "\n\n".join(snippets)
@@ -584,7 +584,7 @@ Rules:
 - Never speak as the user.
 - Do not say "I might", "my", or "me".
 - State the most significant pattern or finding first.
-- Cite which evidence supports it.
+- Cite support by source filename, not by labels like "Evidence 1" or "Evidence 2".
 - Clearly separate what the evidence shows from what you're inferring.
 - Mention confidence naturally, and note what would raise it.
 - If confidence is low, still answer, but make the uncertainty explicit.

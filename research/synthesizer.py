@@ -12,10 +12,9 @@ groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 def format_evidence(evidence):
     parts = []
 
-    for i, item in enumerate(evidence, start=1):
+    for item in evidence:
         parts.append(
-            f"Evidence {i}\n"
-            f"Source: {item['source']}\n"
+            f"File: {item['source']}\n"
             f"Date: {item['date']}\n"
             f"Confidence: {item['confidence_score']} ({item['confidence_tier']})\n"
             f"Quality: {item['quality']}\n"
@@ -45,6 +44,7 @@ Rules:
 - Mention uncertainty when needed.
 - Mention conflicts if evidence disagrees.
 - Keep the answer concise.
+- When citing support, name the source filename. Do not cite sources as "Evidence 1", "Evidence 2", etc.
 - If there is not enough evidence, say exactly:
 "{NOT_FOUND_MESSAGE}"
 
