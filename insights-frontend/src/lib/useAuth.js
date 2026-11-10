@@ -15,6 +15,7 @@ export function useAuth() {
     const urlToken = params.get("token");
     if (urlToken) {
       localStorage.setItem("insight_token", urlToken);
+      localStorage.removeItem("insight_try_mode");
       params.delete("token");
       const pendingPath = localStorage.getItem("insight_after_login");
       if (pendingPath) localStorage.removeItem("insight_after_login");

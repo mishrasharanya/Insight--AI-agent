@@ -1,6 +1,8 @@
 import "./App.css";
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "sonner";
+import api from "./lib/api";
 import { useAuth } from "./lib/useAuth";
 import Login from "./pages/Login";
 import Layout from "./components/Layout";
@@ -23,6 +25,10 @@ function Protected({ children }) {
 }
 
 function App() {
+  useEffect(() => {
+    api.get("/health").catch(() => {});
+  }, []);
+
   return (
     <div className="App">
       <Toaster position="top-right" richColors closeButton />

@@ -4,6 +4,7 @@ export const INSIGHT_API_URL = process.env.REACT_APP_INSIGHT_API_URL;
 
 const api = axios.create({
   baseURL: INSIGHT_API_URL,
+  timeout: 12000,
   headers: { "Content-Type": "application/json" },
 });
 

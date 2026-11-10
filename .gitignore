@@ -1,0 +1,21 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+
+output/
+tmp/
+scripts/
+data_sources.json
+test.py
+
+# Separate local project; not part of PI-agent.
+arrival-lens/
